@@ -61,6 +61,6 @@ END;
 $$;
 SQL
 
-./scripts/check_pipeline_alerts.sh
+DATASET_CODE=ILOSTAT ./scripts/check_pipeline_alerts.sh
 
 echo "Live ILOSTAT unemployment contract test passed"

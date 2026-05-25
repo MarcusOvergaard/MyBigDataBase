@@ -3,10 +3,20 @@ set -euo pipefail
 
 DB_NAME="${DB_NAME:-country_intel}"
 PSQL_CMD="${PSQL_CMD:-psql -v ON_ERROR_STOP=1}"
+DATASET_CODE="${DATASET_CODE:-}"
 
-alert_count="$($PSQL_CMD -d "$DB_NAME" -tA <<'SQL'
+if [[ -n "$DATASET_CODE" ]]; then
+    filter_sql="WHERE dataset_code = '$DATASET_CODE'"
+    scope_label="dataset $DATASET_CODE"
+else
+    filter_sql=""
+    scope_label="all active datasets"
+fi
+
+alert_count="$($PSQL_CMD -d "$DB_NAME" -tA <<SQL
 SELECT COUNT(*)
-FROM mart.dataset_pipeline_alerts;
+FROM mart.dataset_pipeline_alerts
+${filter_sql};
 SQL
 )"
 
@@ -18,14 +28,14 @@ if [[ -z "$alert_count" ]]; then
 fi
 
 if [[ "$alert_count" == "0" ]]; then
-    echo "Pipeline alert check passed: mart.dataset_pipeline_alerts is empty"
+    echo "Pipeline alert check passed for $scope_label: mart.dataset_pipeline_alerts is empty"
     exit 0
 fi
 
-echo "Pipeline alert check failed: mart.dataset_pipeline_alerts has $alert_count row(s)" >&2
+echo "Pipeline alert check failed for $scope_label: mart.dataset_pipeline_alerts has $alert_count row(s)" >&2
 
 echo "--- active pipeline alerts ---" >&2
-$PSQL_CMD -d "$DB_NAME" <<'SQL' >&2
+$PSQL_CMD -d "$DB_NAME" <<SQL >&2
 SELECT
     dataset_code,
     alert_severity,
@@ -37,6 +47,7 @@ SELECT
     failed_source_batch_count_7d,
     last_error_at
 FROM mart.dataset_pipeline_alerts
+${filter_sql}
 ORDER BY
     dataset_code,
     CASE alert_severity

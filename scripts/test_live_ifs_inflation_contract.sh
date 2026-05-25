@@ -59,6 +59,6 @@ END;
 $$;
 SQL
 
-./scripts/check_pipeline_alerts.sh
+DATASET_CODE=IFS ./scripts/check_pipeline_alerts.sh
 
 echo "Live IFS inflation contract test passed"

@@ -55,6 +55,6 @@ END;
 $$;
 SQL
 
-./scripts/check_pipeline_alerts.sh
+DATASET_CODE=UN_COMTRADE_ANNUAL ./scripts/check_pipeline_alerts.sh
 
 echo "Live UN Comtrade trade contract test passed"

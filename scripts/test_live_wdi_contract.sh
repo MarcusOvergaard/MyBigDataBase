@@ -63,6 +63,6 @@ END;
 $$;
 SQL
 
-./scripts/check_pipeline_alerts.sh
+DATASET_CODE=WDI ./scripts/check_pipeline_alerts.sh
 
 echo "Live WDI contract test passed"
