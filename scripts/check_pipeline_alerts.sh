@@ -31,10 +31,10 @@ SELECT
     alert_severity,
     alert_code,
     alert_message,
-    latest_source_batch_status,
+    latest_batch_ingest_status,
     latest_pipeline_status,
     latest_publish_status,
-    recent_failed_batch_count_7d,
+    failed_source_batch_count_7d,
     last_error_at
 FROM mart.dataset_pipeline_alerts
 ORDER BY
