@@ -2,6 +2,9 @@
 DO $$
 DECLARE
     phase2_indicator_count INT;
+    labor_indicator_count INT;
+    labor_non_labor_indicator_count INT;
+    labor_row_count INT;
     employment_populated_count INT;
     labor_force_participation_populated_count INT;
     latest_row_count INT;
@@ -23,6 +26,40 @@ BEGIN
 
     IF phase2_indicator_count <> 5 THEN
         RAISE EXCEPTION 'Phase 2 starter mart test failed: expected 5 distinct seeded indicators in mart_country_phase2_series_annual, found %', phase2_indicator_count;
+    END IF;
+
+    SELECT COUNT(DISTINCT indicator_code)
+    INTO labor_indicator_count
+    FROM mart.mart_country_labor_series_annual
+    WHERE indicator_code IN (
+        'EMPLOYMENT_RATE_PCT',
+        'LABOR_FORCE_PARTICIPATION_RATE_PCT',
+        'UNEMPLOYMENT_RATE_PCT'
+    );
+
+    IF labor_indicator_count <> 3 THEN
+        RAISE EXCEPTION 'Phase 2 starter mart test failed: expected 3 distinct labor indicators in mart_country_labor_series_annual, found %', labor_indicator_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO labor_non_labor_indicator_count
+    FROM mart.mart_country_labor_series_annual
+    WHERE indicator_code NOT IN (
+        'EMPLOYMENT_RATE_PCT',
+        'LABOR_FORCE_PARTICIPATION_RATE_PCT',
+        'UNEMPLOYMENT_RATE_PCT'
+    );
+
+    IF labor_non_labor_indicator_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 starter mart test failed: mart_country_labor_series_annual contains % non-labor row(s)', labor_non_labor_indicator_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO labor_row_count
+    FROM mart.mart_country_labor_series_annual;
+
+    IF labor_row_count = 0 THEN
+        RAISE EXCEPTION 'Phase 2 starter mart test failed: mart_country_labor_series_annual returned no rows';
     END IF;
 
     SELECT COUNT(*)
@@ -120,6 +157,19 @@ BEGIN
     END IF;
 END;
 $$;
+
+SELECT
+    iso_alpha_3,
+    country_name,
+    indicator_code,
+    observation_year,
+    observation_value,
+    source_code,
+    dataset_code,
+    series_code
+FROM mart.mart_country_labor_series_annual
+ORDER BY iso_alpha_3, indicator_code, observation_year DESC
+LIMIT 10;
 
 SELECT
     iso_alpha_3,

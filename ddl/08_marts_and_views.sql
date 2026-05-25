@@ -90,7 +90,7 @@ SELECT
     ml.latest_published_at
 FROM mart.mart_country_macro_latest ml;
 
-CREATE OR REPLACE VIEW mart.mart_country_phase2_series_annual AS
+CREATE OR REPLACE VIEW mart.mart_country_labor_series_annual AS
 SELECT
     ms.country_key,
     ms.iso_alpha_3,
@@ -125,7 +125,45 @@ FROM mart.mart_country_macro_series_annual ms
 WHERE ms.indicator_code IN (
     'EMPLOYMENT_RATE_PCT',
     'LABOR_FORCE_PARTICIPATION_RATE_PCT',
-    'UNEMPLOYMENT_RATE_PCT',
+    'UNEMPLOYMENT_RATE_PCT'
+);
+
+CREATE OR REPLACE VIEW mart.mart_country_phase2_series_annual AS
+SELECT *
+FROM mart.mart_country_labor_series_annual
+UNION ALL
+SELECT
+    ms.country_key,
+    ms.iso_alpha_3,
+    ms.country_name,
+    ms.region_name,
+    ms.income_group,
+    ms.indicator_key,
+    ms.indicator_code,
+    ms.indicator_name,
+    ms.topic,
+    ms.time_key,
+    ms.observation_year,
+    ms.observation_value,
+    ms.unit_key,
+    ms.unit_code,
+    ms.unit_name,
+    ms.source_system_key,
+    ms.source_code,
+    ms.source_name,
+    ms.source_dataset_key,
+    ms.dataset_code,
+    ms.dataset_name,
+    ms.source_series_key,
+    ms.series_code,
+    ms.series_name,
+    ms.source_batch_key,
+    ms.observation_version_key,
+    ms.selection_method,
+    ms.publication_version_key,
+    ms.published_at
+FROM mart.mart_country_macro_series_annual ms
+WHERE ms.indicator_code IN (
     'TRADE_EXPORTS_CURR_USD',
     'TRADE_IMPORTS_CURR_USD'
 );

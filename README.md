@@ -95,11 +95,11 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
    make test-live-contracts-offline
    ```
    This swaps each live fetcher for a committed fixture-backed mock helper under `tests/fixtures/live_sources/`, so the warehouse contract can be verified without depending on external APIs.
-13. **Assert the first Phase 2 labor/trade marts after the offline suite**:
+13. **Assert the first proper labor mart plus the starter mixed Phase 2 labor/trade mart after the offline suite**:
    ```bash
    make test-phase2-starter-marts-offline
    ```
-   This verifies that the seeded ILOSTAT unemployment, employment, and labour-force-participation indicators plus the UN Comtrade exports/imports indicators populate the analyst-facing Phase 2 starter marts correctly, including the derived trade-balance fields.
+   This verifies that `mart.mart_country_labor_series_annual` cleanly exposes the seeded ILOSTAT unemployment, employment, and labour-force-participation indicators, and that the mixed Phase 2 latest view still combines those labor indicators with the UN Comtrade exports/imports indicators correctly, including the derived trade-balance fields.
 
 ## Schema Architecture
 
@@ -152,7 +152,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 - `scripts/load_ilostat_live.sh`: first live ILOSTAT loader for annual total unemployment rate, employment-to-population ratio, and labour force participation rate ages 15+, now defaulting to the canonical seeded country basket from `ref.country` across the widened 2019-2023 proof window, recorded as snapshot-backed evidence and published through the same warehouse contract.
 - `scripts/load_un_comtrade_live.sh`: first live UN Comtrade loader for annual total exports/imports against World partner totals, now using targeted reporter-code requests derived from the canonical seeded country basket across the widened 2019-2023 proof window, recorded as snapshot-backed evidence and published through the same warehouse contract.
 - `scripts/check_pipeline_alerts.sh`: exits non-zero when `mart.dataset_pipeline_alerts` contains any active alerts, for CI/cron health checks.
-- `queries/test_phase2_starter_marts.sql`: regression checks for the first labor/trade Phase 2 starter marts built from the seeded ILOSTAT labor trio and UN Comtrade trade slices.
+- `queries/test_phase2_starter_marts.sql`: regression checks for the first proper labor mart (`mart.mart_country_labor_series_annual`) plus the starter mixed Phase 2 labor/trade views built from the seeded ILOSTAT labor trio and UN Comtrade trade slices.
 - `scripts/fetch_http_to_snapshot.py`: reusable fetch helper for saving HTTP payloads as local evidence files.
 - `scripts/fetch_uncomtrade_snapshot.py`: UN Comtrade-specific fetch helper that handles CSRF + POST query semantics and persists raw response snapshots.
 - `queries/`: SQL scripts for analysis.
