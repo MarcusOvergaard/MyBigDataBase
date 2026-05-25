@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Country Indicator Version Fact v0",
+  "type": "object",
+  "required": [
+    "country_key",
+    "indicator_key",
+    "time_key",
+    "source_system_key",
+    "source_dataset_key",
+    "source_batch_key",
+    "observation_year",
+    "observation_value",
+    "unit_key",
+    "frequency_code",
+    "status_code",
+    "selection_method",
+    "quality_status",
+    "is_latest_source_version",
+    "first_seen_at"
+  ],
+  "properties": {
+    "country_key": { "type": "integer" },
+    "indicator_key": { "type": "integer" },
+    "time_key": { "type": "integer" },
+    "source_system_key": { "type": "integer" },
+    "source_dataset_key": { "type": "integer" },
+    "source_series_key": { "type": ["integer", "null"] },
+    "source_batch_key": { "type": "integer" },
+    "staging_row_key": { "type": ["integer", "null"] },
+    "observation_year": { "type": "integer" },
+    "observation_value": { "type": "number" },
+    "unit_key": { "type": "integer" },
+    "frequency_code": { "type": "string" },
+    "status_code": {
+      "type": "string",
+      "enum": ["published_candidate", "published", "superseded"]
+    },
+    "selection_method": { "type": "string" },
+    "selection_rule_version_ref": { "type": ["string", "null"] },
+    "quality_status": {
+      "type": "string",
+      "enum": ["pass", "warning"]
+    },
+    "comparability_break_flag": { "type": "boolean", "default": false },
+    "comparability_break_note": { "type": ["string", "null"] },
+    "is_latest_source_version": { "type": "boolean" },
+    "first_seen_at": { "type": "string", "format": "date-time" },
+    "superseded_at": { "type": ["string", "null"], "format": "date-time" },
+    "source_released_at": { "type": ["string", "null"], "format": "date-time" }
+  },
+  "additionalProperties": false
+}

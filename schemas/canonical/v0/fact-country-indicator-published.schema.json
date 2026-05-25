@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Country Indicator Published Fact v0",
+  "type": "object",
+  "required": [
+    "country_key",
+    "indicator_key",
+    "time_key",
+    "observation_year",
+    "observation_value",
+    "unit_key",
+    "source_system_key",
+    "source_dataset_key",
+    "source_batch_key",
+    "observation_version_key",
+    "selection_method",
+    "published_at"
+  ],
+  "properties": {
+    "country_key": { "type": "integer" },
+    "indicator_key": { "type": "integer" },
+    "time_key": { "type": "integer" },
+    "observation_year": { "type": "integer" },
+    "observation_value": { "type": "number" },
+    "unit_key": { "type": "integer" },
+    "source_system_key": { "type": "integer" },
+    "source_dataset_key": { "type": "integer" },
+    "source_series_key": { "type": ["integer", "null"] },
+    "source_batch_key": { "type": "integer" },
+    "observation_version_key": { "type": "integer" },
+    "selection_method": { "type": "string" },
+    "selection_rule_version_ref": { "type": ["string", "null"] },
+    "publication_version_key": { "type": ["integer", "null"] },
+    "comparability_break_flag": { "type": "boolean", "default": false },
+    "comparability_break_note": { "type": ["string", "null"] },
+    "source_switch_flag": { "type": "boolean", "default": false },
+    "published_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": ["string", "null"], "format": "date-time" }
+  },
+  "additionalProperties": false
+}

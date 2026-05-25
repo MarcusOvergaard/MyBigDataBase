@@ -1,0 +1,48 @@
+{
+  "run_ts": "20260523T135422Z",
+  "batch_external_id": "un_comtrade_live_20260523T135422Z",
+  "dataset_code": "UN_COMTRADE_ANNUAL",
+  "countries": [
+    "USA",
+    "DEU"
+  ],
+  "periods": [
+    "2021",
+    "2022"
+  ],
+  "snapshot_root": "ingest/snapshots/un_comtrade/UN_COMTRADE_ANNUAL",
+  "snapshot_count": 2,
+  "row_count_reported": 8,
+  "series": [
+    {
+      "flow_code": "M",
+      "source_series_code": "TRADE_IMPORTS_TOTAL_WORLD",
+      "series_name": "Imports of all goods from World (US$)"
+    },
+    {
+      "flow_code": "X",
+      "source_series_code": "TRADE_EXPORTS_TOTAL_WORLD",
+      "series_name": "Exports of all goods to World (US$)"
+    }
+  ],
+  "snapshots": [
+    {
+      "snapshot_path": "/home/marcusai/MyProjects/MyBigDataBase/ingest/snapshots/un_comtrade/UN_COMTRADE_ANNUAL/20260523T135422Z_2021.json",
+      "content_type": "text/plain; charset=utf-8",
+      "file_hash_sha256": "03d88447b39dd83ffb39ea3321d99669b92d4c7f6e336c0ebea9a55db7995c53",
+      "fetched_at": "2026-05-23T13:54:24Z",
+      "http_status_code": "200",
+      "source_url": "https://comtradeplus.un.org/api/Trade/getDataComtrade?selectedProductOptionsModified=C&selectedFrequencyOptionsModified=A&selectedClassificationOptionsModified=HS&selectValuePeriodsModified=2021&selectValueReportersModified=all&selectValuePartnersModified=0&selectValueTradeflowsModified=m%2Cx&selectValueCommodityCodesModified=total&selectValueCustomsCodesModified=c00&selectValueTransportCodesModified=0&selectValueSecondPartnersModified=0&selectValueAggregateByModified=none&selectValueBreakdownModeModified=classic&selectValueincludeDescModified=True&selectValuecountOnlyModified=False",
+      "period": "2021"
+    },
+    {
+      "snapshot_path": "/home/marcusai/MyProjects/MyBigDataBase/ingest/snapshots/un_comtrade/UN_COMTRADE_ANNUAL/20260523T135422Z_2022.json",
+      "content_type": "text/plain; charset=utf-8",
+      "file_hash_sha256": "876a9fb0f6ef2e30848d430529937e6ac63b157f2f83eaf2045cffcef4e1b7ef",
+      "fetched_at": "2026-05-23T13:54:27Z",
+      "http_status_code": "200",
+      "source_url": "https://comtradeplus.un.org/api/Trade/getDataComtrade?selectedProductOptionsModified=C&selectedFrequencyOptionsModified=A&selectedClassificationOptionsModified=HS&selectValuePeriodsModified=2022&selectValueReportersModified=all&selectValuePartnersModified=0&selectValueTradeflowsModified=m%2Cx&selectValueCommodityCodesModified=total&selectValueCustomsCodesModified=c00&selectValueTransportCodesModified=0&selectValueSecondPartnersModified=0&selectValueAggregateByModified=none&selectValueBreakdownModeModified=classic&selectValueincludeDescModified=True&selectValuecountOnlyModified=False",
+      "period": "2022"
+    }
+  ]
+}

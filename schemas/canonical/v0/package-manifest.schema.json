@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MyBigDataBase Canonical Schema Package Manifest Schema v0",
+  "type": "object",
+  "required": [
+    "package_version",
+    "aligned_repo_contract",
+    "schemas"
+  ],
+  "properties": {
+    "package_version": {
+      "type": "string",
+      "const": "v0"
+    },
+    "aligned_repo_contract": {
+      "type": "array",
+      "prefixItems": [
+        { "const": "ref" },
+        { "const": "raw" },
+        { "const": "staging" },
+        { "const": "core" },
+        { "const": "audit" },
+        { "const": "mart" }
+      ],
+      "items": false
+    },
+    "schemas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "path", "purpose"],
+        "properties": {
+          "name": { "type": "string" },
+          "path": { "type": "string" },
+          "purpose": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

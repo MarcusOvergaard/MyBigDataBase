@@ -1,0 +1,98 @@
+{
+  "run_ts": "20260524T092517Z",
+  "batch_external_id": "un_comtrade_live_20260524T092517Z",
+  "dataset_code": "UN_COMTRADE_ANNUAL",
+  "countries": [
+    "ARG",
+    "AUS",
+    "BRA",
+    "CAN",
+    "CHE",
+    "CHN",
+    "DEU",
+    "ESP",
+    "FRA",
+    "GBR",
+    "IDN",
+    "IND",
+    "ITA",
+    "JPN",
+    "KOR",
+    "MEX",
+    "NGA",
+    "POL",
+    "RUS",
+    "SAU",
+    "SGP",
+    "TUR",
+    "USA",
+    "VNM",
+    "ZAF"
+  ],
+  "reporter_codes": [
+    "32",
+    "36",
+    "76",
+    "124",
+    "757",
+    "156",
+    "276",
+    "724",
+    "251",
+    "826",
+    "360",
+    "699",
+    "380",
+    "392",
+    "410",
+    "484",
+    "566",
+    "616",
+    "643",
+    "682",
+    "702",
+    "792",
+    "842",
+    "704",
+    "710"
+  ],
+  "periods": [
+    "2021",
+    "2022"
+  ],
+  "snapshot_root": "ingest/snapshots/un_comtrade/UN_COMTRADE_ANNUAL",
+  "snapshot_count": 2,
+  "row_count_reported": 98,
+  "series": [
+    {
+      "flow_code": "M",
+      "source_series_code": "TRADE_IMPORTS_TOTAL_WORLD",
+      "series_name": "Imports of all goods from World (US$)"
+    },
+    {
+      "flow_code": "X",
+      "source_series_code": "TRADE_EXPORTS_TOTAL_WORLD",
+      "series_name": "Exports of all goods to World (US$)"
+    }
+  ],
+  "snapshots": [
+    {
+      "snapshot_path": "/home/marcusai/MyProjects/MyBigDataBase/ingest/snapshots/un_comtrade/UN_COMTRADE_ANNUAL/20260524T092517Z_2021.json",
+      "content_type": "text/plain; charset=utf-8",
+      "file_hash_sha256": "9d4cb796845061f5bceecf311423e4c38212ad8b8dad41c12399d1bf3a7859df",
+      "fetched_at": "2026-05-24T09:25:20Z",
+      "http_status_code": "200",
+      "source_url": "https://comtradeplus.un.org/api/Trade/getDataComtrade?selectedProductOptionsModified=C&selectedFrequencyOptionsModified=A&selectedClassificationOptionsModified=HS&selectValuePeriodsModified=2021&selectValueReportersModified=32%2C36%2C76%2C124%2C757%2C156%2C276%2C724%2C251%2C826%2C360%2C699%2C380%2C392%2C410%2C484%2C566%2C616%2C643%2C682%2C702%2C792%2C842%2C704%2C710&selectValuePartnersModified=0&selectValueTradeflowsModified=m%2Cx&selectValueCommodityCodesModified=total&selectValueCustomsCodesModified=c00&selectValueTransportCodesModified=0&selectValueSecondPartnersModified=0&selectValueAggregateByModified=none&selectValueBreakdownModeModified=classic&selectValueincludeDescModified=True&selectValuecountOnlyModified=False",
+      "period": "2021"
+    },
+    {
+      "snapshot_path": "/home/marcusai/MyProjects/MyBigDataBase/ingest/snapshots/un_comtrade/UN_COMTRADE_ANNUAL/20260524T092517Z_2022.json",
+      "content_type": "text/plain; charset=utf-8",
+      "file_hash_sha256": "ae3ca8d9bd1fc54fbc91a87d81ab3544f1b91635d0bd01302483bcc7c0a2da1c",
+      "fetched_at": "2026-05-24T09:25:23Z",
+      "http_status_code": "200",
+      "source_url": "https://comtradeplus.un.org/api/Trade/getDataComtrade?selectedProductOptionsModified=C&selectedFrequencyOptionsModified=A&selectedClassificationOptionsModified=HS&selectValuePeriodsModified=2022&selectValueReportersModified=32%2C36%2C76%2C124%2C757%2C156%2C276%2C724%2C251%2C826%2C360%2C699%2C380%2C392%2C410%2C484%2C566%2C616%2C643%2C682%2C702%2C792%2C842%2C704%2C710&selectValuePartnersModified=0&selectValueTradeflowsModified=m%2Cx&selectValueCommodityCodesModified=total&selectValueCustomsCodesModified=c00&selectValueTransportCodesModified=0&selectValueSecondPartnersModified=0&selectValueAggregateByModified=none&selectValueBreakdownModeModified=classic&selectValueincludeDescModified=True&selectValuecountOnlyModified=False",
+      "period": "2022"
+    }
+  ]
+}

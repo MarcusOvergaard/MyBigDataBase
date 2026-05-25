@@ -1,0 +1,56 @@
+{
+  "run_ts": "20260524T094410Z",
+  "batch_external_id": "ilostat_live_20260524T094410Z",
+  "dataset_code": "ILOSTAT",
+  "countries": [
+    "ARG",
+    "AUS",
+    "BRA",
+    "CAN",
+    "CHE",
+    "CHN",
+    "DEU",
+    "ESP",
+    "FRA",
+    "GBR",
+    "IDN",
+    "IND",
+    "ITA",
+    "JPN",
+    "KOR",
+    "MEX",
+    "NGA",
+    "POL",
+    "RUS",
+    "SAU",
+    "SGP",
+    "TUR",
+    "USA",
+    "VNM",
+    "ZAF"
+  ],
+  "timefrom": "2021",
+  "timeto": "2022",
+  "snapshot_root": "ingest/snapshots/ilostat/ILOSTAT",
+  "snapshot_count": 1,
+  "row_count_reported": 4,
+  "series_requests": [
+    {
+      "source_series_code": "UNE_RATE_15PLUS_TOTAL",
+      "series_name": "Unemployment rate, total ages 15+ (%)",
+      "api_indicator_id": "SDG_0852_SEX_AGE_RT_A",
+      "sex": "SEX_T",
+      "classif1": "AGE_YTHADULT_YGE15"
+    }
+  ],
+  "snapshots": [
+    {
+      "snapshot_path": "/home/marcusai/MyProjects/MyBigDataBase/ingest/snapshots/ilostat/ILOSTAT/20260524T094410Z_UNE_RATE_15PLUS_TOTAL.json",
+      "content_type": "application/json",
+      "file_hash_sha256": "a0904dedbed8cc2536a746604c1c316283cebb145f83058aca6b243425a934c1",
+      "fetched_at": "2026-05-24T09:44:10Z",
+      "http_status_code": "200",
+      "source_url": "https://rplumber.ilo.org/data/indicator?id=SDG_0852_SEX_AGE_RT_A&ref_area=ARG+AUS+BRA+CAN+CHE+CHN+DEU+ESP+FRA+GBR+IDN+IND+ITA+JPN+KOR+MEX+NGA+POL+RUS+SAU+SGP+TUR+USA+VNM+ZAF&sex=SEX_T&classif1=AGE_YTHADULT_YGE15&timefrom=2021&timeto=2022&format=json"
+    }
+  ]
+}

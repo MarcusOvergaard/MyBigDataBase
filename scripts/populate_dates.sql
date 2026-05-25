@@ -1,0 +1,12 @@
+-- LEGACY STUB — do not use for the active Phase 1 warehouse path.
+--
+-- This file populated the old `dw.dim_date` table from the pre-Phase-1 prototype.
+-- The current warehouse uses `core.dim_time` instead.
+--
+-- Active replacement:
+--   scripts/populate_core_time.sql
+--
+-- If you are initializing or refreshing the current warehouse, run:
+--   make init
+--
+-- Intentionally no-op.

@@ -1,0 +1,16 @@
+-- LEGACY STUB — do not use for the active Phase 1 warehouse path.
+--
+-- This file belonged to the older `dw`-schema prototype.
+-- It is kept only as a historical marker so old notes or shell history do not point
+-- at a missing file.
+--
+-- Active replacement:
+--   seeds/00_ref_metadata_seeds.sql
+--
+-- Active contract:
+--   ref -> raw -> staging -> core -> audit -> mart
+--
+-- If you are initializing or refreshing the current warehouse, run:
+--   make init
+--
+-- Intentionally no-op.

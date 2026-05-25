@@ -1,0 +1,41 @@
+{
+  "run_ts": "20260523T030000Z",
+  "batch_external_id": "ifs_live_20260523T030000Z",
+  "dataset_code": "IFS",
+  "countries": [
+    "USA",
+    "DEU"
+  ],
+  "years": [
+    "2021",
+    "2022"
+  ],
+  "snapshot_root": "/home/marcusai/MyProjects/MyBigDataBase/ingest/snapshots/ifs/IFS",
+  "row_count_reported": 8,
+  "snapshots": [
+    {
+      "snapshot_path": "/home/marcusai/MyProjects/MyBigDataBase/ingest/snapshots/ifs/IFS/20260523T030000Z_countries.json",
+      "content_type": "application/json",
+      "file_hash_sha256": "f74b5bc5eeb69f3da3edcd19caaab95d94f02a476c1382590a77024164d3b836",
+      "fetched_at": "2026-05-23T02:27:44Z",
+      "http_status_code": "200",
+      "source_url": "https://www.imf.org/external/datamapper/api/v1/countries"
+    },
+    {
+      "snapshot_path": "/home/marcusai/MyProjects/MyBigDataBase/ingest/snapshots/ifs/IFS/20260523T030000Z_PCPIPCH.json",
+      "content_type": "application/json",
+      "file_hash_sha256": "7941a765c2beacd72df496d78b2cf296c38c20dbfa0a3030f8c442aac984fd2d",
+      "fetched_at": "2026-05-23T02:27:46Z",
+      "http_status_code": "200",
+      "source_url": "https://www.imf.org/external/datamapper/api/v1/PCPIPCH"
+    },
+    {
+      "snapshot_path": "/home/marcusai/MyProjects/MyBigDataBase/ingest/snapshots/ifs/IFS/20260523T030000Z_NGDPD.json",
+      "content_type": "application/json",
+      "file_hash_sha256": "dc7ed5efe35955cc072127c7c80a294f905a06efdf823e35c763e0db2ffd43f1",
+      "fetched_at": "2026-05-23T02:27:51Z",
+      "http_status_code": "200",
+      "source_url": "https://www.imf.org/external/datamapper/api/v1/NGDPD"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "./package-manifest.schema.json",
+  "package_version": "v0",
+  "aligned_repo_contract": [
+    "ref",
+    "raw",
+    "staging",
+    "core",
+    "audit",
+    "mart"
+  ],
+  "schemas": [
+    {
+      "name": "indicator source priority rule",
+      "path": "schemas/canonical/v0/indicator-source-priority-rule.schema.json",
+      "purpose": "Starter contract for effective-dated source authority and override metadata."
+    },
+    {
+      "name": "country indicator version fact",
+      "path": "schemas/canonical/v0/fact-country-indicator-version.schema.json",
+      "purpose": "Starter contract for canonical version-history fact rows."
+    },
+    {
+      "name": "country indicator published fact",
+      "path": "schemas/canonical/v0/fact-country-indicator-published.schema.json",
+      "purpose": "Starter contract for one-row-per-country-indicator-time published facts."
+    }
+  ]
+}

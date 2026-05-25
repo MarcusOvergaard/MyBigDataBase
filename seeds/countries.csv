@@ -1,0 +1,26 @@
+iso_alpha_2,iso_alpha_3,iso_numeric,country_name,region,income_group
+US,USA,840,United States,North America,High income
+CN,CHN,156,China,East Asia & Pacific,Upper middle income
+JP,JPN,392,Japan,East Asia & Pacific,High income
+DE,DEU,276,Germany,Europe & Central Asia,High income
+IN,IND,356,India,South Asia,Lower middle income
+GB,GBR,826,United Kingdom,Europe & Central Asia,High income
+FR,FRA,250,France,Europe & Central Asia,High income
+BR,BRA,076,Brazil,Latin America & Caribbean,Upper middle income
+IT,ITA,380,Italy,Europe & Central Asia,High income
+CA,CAN,124,Canada,North America,High income
+RU,RUS,643,Russian Federation,Europe & Central Asia,Upper middle income
+KR,KOR,410,Korea Rep.,East Asia & Pacific,High income
+AU,AUS,036,Australia,East Asia & Pacific,High income
+ES,ESP,724,Spain,Europe & Central Asia,High income
+MX,MEX,484,Mexico,Latin America & Caribbean,Upper middle income
+ID,IDN,360,Indonesia,East Asia & Pacific,Lower middle income
+SA,SAU,682,Saudi Arabia,Middle East & North Africa,High income
+TR,TUR,792,Turkiye,Europe & Central Asia,Upper middle income
+CH,CHE,756,Switzerland,Europe & Central Asia,High income
+PL,POL,616,Poland,Europe & Central Asia,High income
+AR,ARG,032,Argentina,Latin America & Caribbean,Upper middle income
+NG,NGA,566,Nigeria,Sub-Saharan Africa,Lower middle income
+ZA,ZAF,710,South Africa,Sub-Saharan Africa,Upper middle income
+SG,SGP,702,Singapore,East Asia & Pacific,High income
+VN,VNM,704,Vietnam,East Asia & Pacific,Lower middle income

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Indicator Source Priority Rule v0",
+  "type": "object",
+  "required": [
+    "indicator_code",
+    "source_system_code",
+    "source_dataset_code",
+    "priority_rank",
+    "selection_rationale",
+    "is_override"
+  ],
+  "properties": {
+    "indicator_code": { "type": "string" },
+    "source_system_code": { "type": "string" },
+    "source_dataset_code": { "type": "string" },
+    "country_iso_alpha_3": { "type": ["string", "null"] },
+    "source_series_code": { "type": ["string", "null"] },
+    "priority_rank": { "type": "integer", "minimum": 1 },
+    "valid_from_year": { "type": ["integer", "null"] },
+    "valid_to_year": { "type": ["integer", "null"] },
+    "effective_from": { "type": ["string", "null"], "format": "date" },
+    "effective_to": { "type": ["string", "null"], "format": "date" },
+    "release_window_code": { "type": ["string", "null"] },
+    "selection_rationale": { "type": "string" },
+    "is_override": { "type": "boolean" },
+    "rule_version_ref": { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}
