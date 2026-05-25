@@ -41,8 +41,10 @@ BEGIN
         WHERE sb.source_batch_key = latest_batch_key
           AND sb.request_params_json -> 'source_series_codes' @> '["UNE_RATE_15PLUS_TOTAL"]'::jsonb
           AND sb.request_params_json -> 'api_indicator_ids' @> '["SDG_0852_SEX_AGE_RT_A"]'::jsonb
+          AND sb.request_params_json ->> 'timefrom' = '2019'
+          AND sb.request_params_json ->> 'timeto' = '2023'
     ) THEN
-        RAISE EXCEPTION 'Live ILOSTAT contract test failed: latest live ILOSTAT batch does not declare the unemployment request mapping';
+        RAISE EXCEPTION 'Live ILOSTAT contract test failed: latest live ILOSTAT batch does not declare the widened unemployment request mapping';
     END IF;
 
     IF NOT EXISTS (

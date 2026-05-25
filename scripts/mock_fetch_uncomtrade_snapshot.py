@@ -6,10 +6,13 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent / 'ingest' / 'snapshots' / 'un_comtrade' / 'UN_COMTRADE_ANNUAL'
+ROOT = Path(__file__).resolve().parent.parent / 'tests' / 'fixtures' / 'live_sources' / 'un_comtrade'
 FIXTURES = {
-    '2021': ROOT / '20260523T135400Z_2021.json',
-    '2022': ROOT / '20260523T135400Z_2022.json',
+    '2019': ROOT / '2019.json',
+    '2020': ROOT / '2020.json',
+    '2021': ROOT / '2021.json',
+    '2022': ROOT / '2022.json',
+    '2023': ROOT / '2023.json',
 }
 
 

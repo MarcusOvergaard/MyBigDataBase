@@ -6,9 +6,9 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent / 'ingest' / 'snapshots' / 'ilostat' / 'ILOSTAT'
+ROOT = Path(__file__).resolve().parent.parent / 'tests' / 'fixtures' / 'live_sources' / 'ilostat'
 FIXTURES = {
-    'UNE_RATE_15PLUS_TOTAL': ROOT / '20260523T133900Z_UNE_RATE_15PLUS_TOTAL.json',
+    'UNE_RATE_15PLUS_TOTAL': ROOT / 'UNE_RATE_15PLUS_TOTAL_2019_2023.json',
 }
 
 

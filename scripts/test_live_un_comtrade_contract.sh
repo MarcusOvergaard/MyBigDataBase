@@ -30,11 +30,11 @@ BEGIN
         WHERE sb.source_batch_key = latest_batch_key
           AND sb.request_params_json -> 'source_series_codes' @> '["TRADE_EXPORTS_TOTAL_WORLD","TRADE_IMPORTS_TOTAL_WORLD"]'::jsonb
           AND sb.request_params_json -> 'flow_codes' @> '["X","M"]'::jsonb
-          AND sb.request_params_json -> 'periods' @> '["2021","2022"]'::jsonb
+          AND sb.request_params_json -> 'periods' @> '["2019","2020","2021","2022","2023"]'::jsonb
           AND COALESCE(sb.request_params_json ->> 'selected_reporters', '') <> 'all'
           AND COALESCE(sb.request_params_json ->> 'selected_reporter_iso3', '') <> ''
     ) THEN
-        RAISE EXCEPTION 'Live UN Comtrade contract test failed: latest trade batch is missing expected request lineage';
+        RAISE EXCEPTION 'Live UN Comtrade contract test failed: latest trade batch is missing widened period lineage';
     END IF;
 
     IF NOT EXISTS (
