@@ -664,3 +664,164 @@ ORDER BY
     END,
     s.dataset_code,
     s.alert_code;
+
+CREATE OR REPLACE VIEW mart.vw_labor_source_conflicts AS
+WITH labor_versions AS (
+    SELECT
+        fv.observation_version_key,
+        fv.country_key,
+        dc.iso_alpha_3,
+        dc.country_name,
+        dc.region_name,
+        dc.income_group,
+        fv.indicator_key,
+        di.indicator_code,
+        di.indicator_name,
+        fv.time_key,
+        dt.calendar_year AS observation_year,
+        fv.observation_value,
+        fv.source_system_key,
+        ds.source_code,
+        ds.source_name,
+        fv.source_dataset_key,
+        dd.dataset_code,
+        dd.dataset_name,
+        fv.source_series_key,
+        rs.series_code,
+        rs.series_name,
+        fv.source_batch_key,
+        fv.source_released_at,
+        fv.selection_method,
+        fv.quality_status,
+        fv.status_code,
+        fv.is_latest_source_version,
+        fv.first_seen_at,
+        fv.superseded_at
+    FROM core.fact_country_indicator_version fv
+    JOIN core.dim_country dc ON dc.country_key = fv.country_key
+    JOIN core.dim_indicator di ON di.indicator_key = fv.indicator_key
+    JOIN core.dim_time dt ON dt.time_key = fv.time_key
+    JOIN core.dim_source ds ON ds.source_system_key = fv.source_system_key
+    JOIN core.dim_dataset dd ON dd.source_dataset_key = fv.source_dataset_key
+    LEFT JOIN ref.source_series rs ON rs.source_series_key = fv.source_series_key
+    WHERE di.indicator_code IN (
+        'EMPLOYMENT_RATE_PCT',
+        'LABOR_FORCE_PARTICIPATION_RATE_PCT',
+        'UNEMPLOYMENT_RATE_PCT'
+    )
+),
+conflicted_keys AS (
+    SELECT
+        country_key,
+        indicator_key,
+        time_key
+    FROM labor_versions
+    GROUP BY country_key, indicator_key, time_key
+    HAVING COUNT(DISTINCT source_dataset_key) > 1
+),
+selected_rows AS (
+    SELECT
+        m.country_key,
+        m.indicator_key,
+        m.time_key,
+        m.observation_version_key AS selected_observation_version_key,
+        m.dataset_code AS selected_dataset_code,
+        m.dataset_name AS selected_dataset_name,
+        m.source_code AS selected_source_code,
+        m.series_code AS selected_series_code,
+        m.observation_value AS selected_observation_value,
+        m.selection_method AS selected_selection_method,
+        m.priority_rank AS selected_priority_rank,
+        m.is_override AS selected_is_override,
+        m.selection_rationale AS selected_selection_rationale,
+        m.publication_version_code,
+        m.published_at AS selected_published_at
+    FROM mart.vw_macro_source_selection_lineage m
+    WHERE m.indicator_code IN (
+        'EMPLOYMENT_RATE_PCT',
+        'LABOR_FORCE_PARTICIPATION_RATE_PCT',
+        'UNEMPLOYMENT_RATE_PCT'
+    )
+)
+SELECT
+    lv.country_key,
+    lv.iso_alpha_3,
+    lv.country_name,
+    lv.region_name,
+    lv.income_group,
+    lv.indicator_key,
+    lv.indicator_code,
+    lv.indicator_name,
+    lv.time_key,
+    lv.observation_year,
+    lv.observation_version_key,
+    lv.observation_value,
+    lv.source_system_key,
+    lv.source_code,
+    lv.source_name,
+    lv.source_dataset_key,
+    lv.dataset_code,
+    lv.dataset_name,
+    lv.source_series_key,
+    lv.series_code,
+    lv.series_name,
+    lv.source_batch_key,
+    lv.source_released_at,
+    lv.selection_method,
+    lv.quality_status,
+    lv.status_code,
+    lv.is_latest_source_version,
+    lv.first_seen_at,
+    lv.superseded_at,
+    sr.selected_observation_version_key,
+    sr.selected_dataset_code,
+    sr.selected_dataset_name,
+    sr.selected_source_code,
+    sr.selected_series_code,
+    sr.selected_observation_value,
+    sr.selected_selection_method,
+    sr.selected_priority_rank,
+    sr.selected_is_override,
+    sr.selected_selection_rationale,
+    sr.publication_version_code,
+    sr.selected_published_at,
+    (lv.observation_version_key = sr.selected_observation_version_key) AS is_selected_published_row
+FROM labor_versions lv
+JOIN conflicted_keys ck
+  ON ck.country_key = lv.country_key
+ AND ck.indicator_key = lv.indicator_key
+ AND ck.time_key = lv.time_key
+JOIN selected_rows sr
+  ON sr.country_key = lv.country_key
+ AND sr.indicator_key = lv.indicator_key
+ AND sr.time_key = lv.time_key;
+
+CREATE OR REPLACE VIEW mart.vw_labor_revision_history AS
+SELECT
+    mrh.revision_event_key,
+    mrh.changed_at,
+    mrh.change_type,
+    mrh.iso_alpha_3,
+    mrh.country_name,
+    mrh.indicator_code,
+    mrh.indicator_name,
+    mrh.observation_year,
+    mrh.previous_value,
+    mrh.new_value,
+    mrh.previous_source_batch_key,
+    mrh.new_source_batch_key,
+    mrh.previous_dataset_code,
+    mrh.new_dataset_code,
+    mrh.pipeline_run_key,
+    mrh.pipeline_run_status,
+    mrh.notes,
+    mrh.previous_selection_rule_version_ref,
+    mrh.new_selection_rule_version_ref,
+    mrh.new_comparability_break_flag,
+    mrh.new_comparability_break_note
+FROM mart.vw_macro_revision_history mrh
+WHERE mrh.indicator_code IN (
+    'EMPLOYMENT_RATE_PCT',
+    'LABOR_FORCE_PARTICIPATION_RATE_PCT',
+    'UNEMPLOYMENT_RATE_PCT'
+);

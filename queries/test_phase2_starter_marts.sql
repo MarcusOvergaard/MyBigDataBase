@@ -5,6 +5,10 @@ DECLARE
     labor_indicator_count INT;
     labor_non_labor_indicator_count INT;
     labor_row_count INT;
+    labor_conflict_non_labor_indicator_count INT;
+    labor_conflict_missing_selected_count INT;
+    labor_revision_non_labor_indicator_count INT;
+    labor_revision_missing_change_type_count INT;
     employment_populated_count INT;
     labor_force_participation_populated_count INT;
     latest_row_count INT;
@@ -60,6 +64,52 @@ BEGIN
 
     IF labor_row_count = 0 THEN
         RAISE EXCEPTION 'Phase 2 starter mart test failed: mart_country_labor_series_annual returned no rows';
+    END IF;
+
+    SELECT COUNT(*)
+    INTO labor_conflict_non_labor_indicator_count
+    FROM mart.vw_labor_source_conflicts
+    WHERE indicator_code NOT IN (
+        'EMPLOYMENT_RATE_PCT',
+        'LABOR_FORCE_PARTICIPATION_RATE_PCT',
+        'UNEMPLOYMENT_RATE_PCT'
+    );
+
+    IF labor_conflict_non_labor_indicator_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 starter mart test failed: vw_labor_source_conflicts contains % non-labor row(s)', labor_conflict_non_labor_indicator_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO labor_conflict_missing_selected_count
+    FROM mart.vw_labor_source_conflicts
+    WHERE selected_observation_version_key IS NULL
+       OR selected_dataset_code IS NULL
+       OR selected_selection_method IS NULL;
+
+    IF labor_conflict_missing_selected_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 starter mart test failed: vw_labor_source_conflicts contains % row(s) missing selected-row lineage', labor_conflict_missing_selected_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO labor_revision_non_labor_indicator_count
+    FROM mart.vw_labor_revision_history
+    WHERE indicator_code NOT IN (
+        'EMPLOYMENT_RATE_PCT',
+        'LABOR_FORCE_PARTICIPATION_RATE_PCT',
+        'UNEMPLOYMENT_RATE_PCT'
+    );
+
+    IF labor_revision_non_labor_indicator_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 starter mart test failed: vw_labor_revision_history contains % non-labor row(s)', labor_revision_non_labor_indicator_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO labor_revision_missing_change_type_count
+    FROM mart.vw_labor_revision_history
+    WHERE change_type IS NULL;
+
+    IF labor_revision_missing_change_type_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 starter mart test failed: vw_labor_revision_history contains % row(s) missing change_type', labor_revision_missing_change_type_count;
     END IF;
 
     SELECT COUNT(*)
@@ -169,6 +219,36 @@ SELECT
     series_code
 FROM mart.mart_country_labor_series_annual
 ORDER BY iso_alpha_3, indicator_code, observation_year DESC
+LIMIT 10;
+
+SELECT
+    iso_alpha_3,
+    country_name,
+    indicator_code,
+    observation_year,
+    dataset_code,
+    observation_value,
+    selected_dataset_code,
+    selected_observation_value,
+    selected_selection_method,
+    is_selected_published_row
+FROM mart.vw_labor_source_conflicts
+ORDER BY observation_year DESC, iso_alpha_3, indicator_code, dataset_code
+LIMIT 10;
+
+SELECT
+    iso_alpha_3,
+    country_name,
+    indicator_code,
+    observation_year,
+    change_type,
+    previous_dataset_code,
+    new_dataset_code,
+    previous_value,
+    new_value,
+    changed_at
+FROM mart.vw_labor_revision_history
+ORDER BY changed_at DESC, iso_alpha_3, indicator_code, observation_year
 LIMIT 10;
 
 SELECT

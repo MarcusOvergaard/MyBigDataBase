@@ -90,6 +90,8 @@ run_psql_file ddl/07_audit_tables.sql
 run_psql_stdin <<'EOF'
 DROP VIEW IF EXISTS mart.dataset_pipeline_alerts CASCADE;
 DROP VIEW IF EXISTS mart.dataset_pipeline_health CASCADE;
+DROP VIEW IF EXISTS mart.vw_labor_revision_history CASCADE;
+DROP VIEW IF EXISTS mart.vw_labor_source_conflicts CASCADE;
 DROP VIEW IF EXISTS mart.vw_macro_source_selection_lineage CASCADE;
 DROP VIEW IF EXISTS mart.vw_macro_revision_history CASCADE;
 DROP VIEW IF EXISTS mart.vw_macro_published_with_lineage CASCADE;
