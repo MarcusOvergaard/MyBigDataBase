@@ -43,7 +43,7 @@ FROM (
         ('ISO3166', 'ISO3166_COUNTRY', 'ISO 3166 country code list', 'A', 'country', 'ad_hoc', 'reference', 'manual_file', 'reference', 'csv', FALSE, 'Reference-only seed loaded from local curated files when needed.', FALSE, TRUE),
         ('WB', 'WDI', 'World Development Indicators', 'A', 'country-year-indicator', 'periodic', 'https://api.worldbank.org/v2/country/all/indicator', 'api', 'https://api.worldbank.org/v2/', 'json', FALSE, 'Public API; Phase 2 target is reproducible snapshot fetches for the active Phase 1 indicator slice.', TRUE, TRUE),
         ('IMF', 'IFS', 'International Financial Statistics', 'A', 'country-period-series', 'periodic', 'https://www.imf.org/en/Data', 'api', 'https://www.imf.org/external/datamapper/api/v1/', 'json', FALSE, 'Public API for the narrow arbitration slice first; broader SDMX-style ingestion can come later.', TRUE, TRUE),
-        ('ILO', 'ILOSTAT', 'ILOSTAT bulk and API labor statistics catalog', 'A', 'country-year-indicator', 'periodic', 'https://rplumber.ilo.org/data/', 'api', 'https://rplumber.ilo.org/data/', 'json', FALSE, 'First live slice validated for total unemployment rate ages 15+ across the seeded country basket for 2019-2023; broader labor indicators still need explicit slice-by-slice modeling.', TRUE, TRUE),
+        ('ILO', 'ILOSTAT', 'ILOSTAT bulk and API labor statistics catalog', 'A', 'country-year-indicator', 'periodic', 'https://rplumber.ilo.org/data/', 'api', 'https://rplumber.ilo.org/data/', 'json', FALSE, 'First live slice validated for total unemployment rate, employment-to-population ratio, and labour force participation rate ages 15+ across the seeded country basket for 2019-2023; broader labor indicator families still need explicit slice-by-slice modeling.', TRUE, TRUE),
         ('UN', 'UN_COMTRADE_ANNUAL', 'UN Comtrade annual merchandise trade dataset', 'A', 'country-year-indicator', 'periodic', 'https://comtradeplus.un.org/TradeFlow', 'api', 'https://comtradeplus.un.org/api/Trade/', 'json', FALSE, 'First live slice validated for annual total goods exports and imports against World partner totals across 2019-2023; broader partner and product grains still need explicit modeling.', TRUE, TRUE)
 ) AS s(source_code, dataset_code, dataset_name, default_frequency_code, default_grain, release_cadence, access_path, ingest_access_method, ingest_base_endpoint, ingest_default_format, ingest_requires_auth, ingest_cadence_note, is_active_for_ingest, is_active)
 JOIN ref.source_system ss ON ss.source_code = s.source_code
@@ -60,7 +60,7 @@ FROM (
     VALUES
         ('WDI', 'api', 'https://api.worldbank.org/v2/', 'json', FALSE, 'Public API; Phase 2 target is reproducible snapshot fetches for the active Phase 1 indicator slice.', TRUE),
         ('IFS', 'api', 'https://www.imf.org/external/datamapper/api/v1/', 'json', FALSE, 'Public API for the narrow arbitration slice first; broader SDMX-style ingestion can come later.', TRUE),
-        ('ILOSTAT', 'api', 'https://rplumber.ilo.org/data/', 'json', FALSE, 'First live slice validated for total unemployment rate ages 15+ across the seeded country basket for 2019-2023; broader labor indicators still need explicit slice-by-slice modeling.', TRUE),
+        ('ILOSTAT', 'api', 'https://rplumber.ilo.org/data/', 'json', FALSE, 'First live slice validated for total unemployment rate, employment-to-population ratio, and labour force participation rate ages 15+ across the seeded country basket for 2019-2023; broader labor indicator families still need explicit slice-by-slice modeling.', TRUE),
         ('UN_COMTRADE_ANNUAL', 'api', 'https://comtradeplus.un.org/api/Trade/', 'json', FALSE, 'First live slice validated for annual total goods exports and imports against World partner totals across 2019-2023; broader partner and product grains still need explicit modeling.', TRUE),
         ('ISO3166_COUNTRY', 'manual_file', 'reference', 'csv', FALSE, 'Reference-only seed loaded from local curated files when needed.', FALSE)
 ) AS s(dataset_code, ingest_access_method, ingest_base_endpoint, ingest_default_format, ingest_requires_auth, ingest_cadence_note, is_active_for_ingest)
@@ -84,6 +84,8 @@ FROM (
         ('WDI', 'SP.POP.TOTL', 'Population, total', 'persons', 'A', 'Phase 1 required macro backbone series', TRUE),
         ('IFS', 'NGDP_USD', 'Nominal GDP (current US$)', 'current US$', 'A', 'Minimal IMF IFS sample series for second source-priority arbitration proof', TRUE),
         ('IFS', 'PCPI_PC_PP_PT', 'Inflation, average consumer prices (annual %)', 'annual %', 'A', 'Initial IFS inflation authority series for the live specialist-source slice', TRUE),
+        ('ILOSTAT', 'EMP_RATE_15PLUS_TOTAL', 'Employment-to-population ratio, total ages 15+ (%)', 'percent', 'A', 'Expanded ILOSTAT live labor slice: annual total employment-to-population ratio for ages 15+.', TRUE),
+        ('ILOSTAT', 'LFPR_15PLUS_TOTAL', 'Labour force participation rate, total ages 15+ (%)', 'percent', 'A', 'Expanded ILOSTAT live labor slice: annual total labour force participation rate for ages 15+.', TRUE),
         ('ILOSTAT', 'UNE_RATE_15PLUS_TOTAL', 'Unemployment rate, total ages 15+ (%)', 'percent', 'A', 'Initial ILOSTAT live labor slice: SDG 8.5.2 annual total unemployment rate for ages 15+.', TRUE),
         ('UN_COMTRADE_ANNUAL', 'TRADE_EXPORTS_TOTAL_WORLD', 'Exports of all goods to World (US$)', 'current US$', 'A', 'Initial UN Comtrade live trade slice: annual total exports, partner World, all goods.', TRUE),
         ('UN_COMTRADE_ANNUAL', 'TRADE_IMPORTS_TOTAL_WORLD', 'Imports of all goods from World (US$)', 'current US$', 'A', 'Initial UN Comtrade live trade slice: annual total imports, partner World, all goods.', TRUE)
@@ -103,6 +105,8 @@ FROM (
     VALUES
         ('IFS', 'NGDP_USD', 'imf_datamapper_indicator', 'NGDPD', 'IMF DataMapper API code for Nominal GDP (current US$)', TRUE),
         ('IFS', 'PCPI_PC_PP_PT', 'imf_datamapper_indicator', 'PCPIPCH', 'IMF DataMapper API code for Inflation, average consumer prices (annual %)', TRUE),
+        ('ILOSTAT', 'EMP_RATE_15PLUS_TOTAL', 'ilo_indicator_request', 'EMP_DWAP_SEX_AGE_RT_A|SEX_T|AGE_YTHADULT_YGE15', 'ILOSTAT API request signature for annual total employment-to-population ratio ages 15+.', TRUE),
+        ('ILOSTAT', 'LFPR_15PLUS_TOTAL', 'ilo_indicator_request', 'EAP_DWAP_SEX_AGE_RT_A|SEX_T|AGE_YTHADULT_YGE15', 'ILOSTAT API request signature for annual total labour force participation rate ages 15+.', TRUE),
         ('ILOSTAT', 'UNE_RATE_15PLUS_TOTAL', 'ilo_indicator_request', 'SDG_0852_SEX_AGE_RT_A|SEX_T|AGE_YTHADULT_YGE15', 'ILOSTAT API request signature for annual total unemployment rate ages 15+.', TRUE),
         ('UN_COMTRADE_ANNUAL', 'TRADE_EXPORTS_TOTAL_WORLD', 'uncomtrade_flow_code', 'X', 'UN Comtrade flow code for annual total exports to World.', TRUE),
         ('UN_COMTRADE_ANNUAL', 'TRADE_IMPORTS_TOTAL_WORLD', 'uncomtrade_flow_code', 'M', 'UN Comtrade flow code for annual total imports from World.', TRUE)
@@ -134,6 +138,8 @@ FROM (
         ('GDP_PC_CURR_USD', 'GDP per capita (current US$)', 'macro_foundation', 'CURR_USD_PER_PERSON', 'A', 'numeric', 'latest', TRUE, 'Phase 1 macro foundation GDP per capita at current US dollars.'),
         ('INFLATION_CPI_PCT', 'Inflation, consumer prices (annual %)', 'macro_prices', 'PCT', 'A', 'numeric', 'latest', TRUE, 'Minimal Phase 1 inflation slice used to prove dataset-level source-priority arbitration between WDI and IMF IFS.'),
         ('POP_TOTAL', 'Population, total', 'macro_foundation', 'PERSONS', 'A', 'numeric', 'latest', TRUE, 'Phase 1 macro foundation total population indicator.'),
+        ('EMPLOYMENT_RATE_PCT', 'Employment-to-population ratio, total ages 15+ (%)', 'labor_market', 'PCT', 'A', 'numeric', 'latest', FALSE, 'Expanded Phase 2 labor authority slice sourced from ILOSTAT annual total employment-to-population ratio ages 15+.'),
+        ('LABOR_FORCE_PARTICIPATION_RATE_PCT', 'Labour force participation rate, total ages 15+ (%)', 'labor_market', 'PCT', 'A', 'numeric', 'latest', FALSE, 'Expanded Phase 2 labor authority slice sourced from ILOSTAT annual total labour force participation rate ages 15+.'),
         ('UNEMPLOYMENT_RATE_PCT', 'Unemployment rate, total ages 15+ (%)', 'labor_market', 'PCT', 'A', 'numeric', 'latest', FALSE, 'Initial Phase 2 labor authority slice sourced from ILOSTAT SDG 8.5.2 annual total unemployment rate ages 15+.'),
         ('TRADE_EXPORTS_CURR_USD', 'Exports of all goods to World (current US$)', 'trade', 'CURR_USD', 'A', 'numeric', 'latest', FALSE, 'Initial Phase 2 trade authority slice sourced from UN Comtrade annual total goods exports to World.'),
         ('TRADE_IMPORTS_CURR_USD', 'Imports of all goods from World (current US$)', 'trade', 'CURR_USD', 'A', 'numeric', 'latest', FALSE, 'Initial Phase 2 trade authority slice sourced from UN Comtrade annual total goods imports from World.')
@@ -156,6 +162,8 @@ FROM (
         ('INFLATION_CPI_PCT', 'WDI', 'FP.CPI.TOTL.ZG', 'WDI inflation fallback mapping', TRUE),
         ('INFLATION_CPI_PCT', 'IFS', 'PCPI_PC_PP_PT', 'IFS inflation authority mapping for the live specialist-source slice', TRUE),
         ('POP_TOTAL', 'WDI', 'SP.POP.TOTL', 'WDI population backbone mapping', TRUE),
+        ('EMPLOYMENT_RATE_PCT', 'ILOSTAT', 'EMP_RATE_15PLUS_TOTAL', 'ILOSTAT employment-to-population authority mapping for the expanded live labor slice', TRUE),
+        ('LABOR_FORCE_PARTICIPATION_RATE_PCT', 'ILOSTAT', 'LFPR_15PLUS_TOTAL', 'ILOSTAT labour-force-participation authority mapping for the expanded live labor slice', TRUE),
         ('UNEMPLOYMENT_RATE_PCT', 'ILOSTAT', 'UNE_RATE_15PLUS_TOTAL', 'ILOSTAT unemployment authority mapping for the first live labor slice', TRUE),
         ('TRADE_EXPORTS_CURR_USD', 'UN_COMTRADE_ANNUAL', 'TRADE_EXPORTS_TOTAL_WORLD', 'UN Comtrade exports authority mapping for the first live trade slice', TRUE),
         ('TRADE_IMPORTS_CURR_USD', 'UN_COMTRADE_ANNUAL', 'TRADE_IMPORTS_TOTAL_WORLD', 'UN Comtrade imports authority mapping for the first live trade slice', TRUE)
@@ -200,6 +208,8 @@ WHERE isp.indicator_key = i.indicator_key
       OR (i.indicator_code = 'GDP_PC_CURR_USD' AND d.dataset_code = 'WDI')
       OR (i.indicator_code = 'INFLATION_CPI_PCT' AND d.dataset_code IN ('WDI', 'IFS'))
       OR (i.indicator_code = 'POP_TOTAL' AND d.dataset_code = 'WDI')
+      OR (i.indicator_code = 'EMPLOYMENT_RATE_PCT' AND d.dataset_code = 'ILOSTAT')
+      OR (i.indicator_code = 'LABOR_FORCE_PARTICIPATION_RATE_PCT' AND d.dataset_code = 'ILOSTAT')
       OR (i.indicator_code = 'UNEMPLOYMENT_RATE_PCT' AND d.dataset_code = 'ILOSTAT')
       OR (i.indicator_code = 'TRADE_EXPORTS_CURR_USD' AND d.dataset_code = 'UN_COMTRADE_ANNUAL')
       OR (i.indicator_code = 'TRADE_IMPORTS_CURR_USD' AND d.dataset_code = 'UN_COMTRADE_ANNUAL')
@@ -227,6 +237,8 @@ FROM (
         ('INFLATION_CPI_PCT', 'IFS', 1, 'IMF IFS is the preferred authority for the minimal inflation source-selection proof.'),
         ('INFLATION_CPI_PCT', 'WDI', 2, 'WDI remains the broad-coverage fallback inflation series when the minimal IMF IFS sample does not cover a country-year.'),
         ('POP_TOTAL', 'WDI', 1, 'Phase 1 production backbone uses WDI for broad annual country coverage.'),
+        ('EMPLOYMENT_RATE_PCT', 'ILOSTAT', 1, 'ILOSTAT is the preferred authority for the first employment-to-population labor slice.'),
+        ('LABOR_FORCE_PARTICIPATION_RATE_PCT', 'ILOSTAT', 1, 'ILOSTAT is the preferred authority for the first labour-force-participation labor slice.'),
         ('UNEMPLOYMENT_RATE_PCT', 'ILOSTAT', 1, 'ILOSTAT is the preferred authority for the first unemployment-rate labor slice.'),
         ('TRADE_EXPORTS_CURR_USD', 'UN_COMTRADE_ANNUAL', 1, 'UN Comtrade is the preferred authority for the first total-exports trade slice.'),
         ('TRADE_IMPORTS_CURR_USD', 'UN_COMTRADE_ANNUAL', 1, 'UN Comtrade is the preferred authority for the first total-imports trade slice.')

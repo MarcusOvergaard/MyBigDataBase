@@ -99,7 +99,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
    ```bash
    make test-phase2-starter-marts-offline
    ```
-   This verifies that the seeded ILOSTAT unemployment and UN Comtrade exports/imports indicators populate the analyst-facing Phase 2 starter marts correctly, including the derived trade-balance fields.
+   This verifies that the seeded ILOSTAT unemployment, employment, and labour-force-participation indicators plus the UN Comtrade exports/imports indicators populate the analyst-facing Phase 2 starter marts correctly, including the derived trade-balance fields.
 
 ## Schema Architecture
 
@@ -128,7 +128,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 ### Operational contract
 - The runnable warehouse path is now the Phase 1 contract end to end: `raw -> staging -> core -> audit -> mart`.
 - `etl` contains the normalization and publication procedures that support that contract.
-- The current runnable loader path is sample-based. Real API ingestion is still future work that should plug into this same contract rather than create a separate path.
+- The repo now supports both sample loaders and the first live API-backed loaders, and future ingestion work should keep plugging into this same contract rather than create a separate path.
 
 ## Key Files
 - `ddl/01_schemas.sql`: Phase 1 layer bootstrap.
@@ -149,10 +149,10 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 - `scripts/load_phase1_sample.sh`: default runnable sample loader for the Phase 1 raw/staging/core/audit/mart contract.
 - `scripts/load_wdi_live.sh`: first narrow live WDI loader that now defaults to the canonical seeded country basket from `ref.country`, fetches JSON snapshots, records them in `raw.source_snapshot`, and publishes through the existing Phase 1 contract.
 - `scripts/load_ifs_live.sh`: first narrow live IFS loader that now defaults to the canonical seeded country basket from `ref.country`, fetches JSON snapshots plus IMF country metadata, records them in `raw.source_snapshot`, and publishes through the existing Phase 1 contract.
-- `scripts/load_ilostat_live.sh`: first live ILOSTAT loader for annual total unemployment rate ages 15+, now defaulting to the canonical seeded country basket from `ref.country` across the widened 2019-2023 proof window, recorded as snapshot-backed evidence and published through the same warehouse contract.
+- `scripts/load_ilostat_live.sh`: first live ILOSTAT loader for annual total unemployment rate, employment-to-population ratio, and labour force participation rate ages 15+, now defaulting to the canonical seeded country basket from `ref.country` across the widened 2019-2023 proof window, recorded as snapshot-backed evidence and published through the same warehouse contract.
 - `scripts/load_un_comtrade_live.sh`: first live UN Comtrade loader for annual total exports/imports against World partner totals, now using targeted reporter-code requests derived from the canonical seeded country basket across the widened 2019-2023 proof window, recorded as snapshot-backed evidence and published through the same warehouse contract.
 - `scripts/check_pipeline_alerts.sh`: exits non-zero when `mart.dataset_pipeline_alerts` contains any active alerts, for CI/cron health checks.
-- `queries/test_phase2_starter_marts.sql`: regression checks for the first labor/trade Phase 2 starter marts built from the seeded ILOSTAT and UN Comtrade slices.
+- `queries/test_phase2_starter_marts.sql`: regression checks for the first labor/trade Phase 2 starter marts built from the seeded ILOSTAT labor trio and UN Comtrade trade slices.
 - `scripts/fetch_http_to_snapshot.py`: reusable fetch helper for saving HTTP payloads as local evidence files.
 - `scripts/fetch_uncomtrade_snapshot.py`: UN Comtrade-specific fetch helper that handles CSRF + POST query semantics and persists raw response snapshots.
 - `queries/`: SQL scripts for analysis.
@@ -171,7 +171,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 
 ## Current status vs future goal
 - Current status: the warehouse structure, publication logic, QA surfaces, and analyst views are working locally with sample WDI and IFS files, and the first live WDI, IFS, ILOSTAT, and UN Comtrade loaders now run end to end.
-- Not done yet: production-grade source coverage across labor, trade, and other domains; the live specialist-source slices now cover the seeded canonical country basket through a widened 2019-2023 proof window for ILOSTAT and UN Comtrade, and the repo now exposes those published results through first-pass Phase 2 starter marts, but they are still deliberately narrow proofs rather than broad production coverage.
+- Not done yet: production-grade source coverage across labor, trade, and other domains; the live specialist-source slices now cover the seeded canonical country basket through a widened 2019-2023 proof window for ILOSTAT and UN Comtrade, with ILOSTAT now proving unemployment, employment, and labour-force-participation rates, and the repo exposes those published results through first-pass Phase 2 starter marts, but they are still deliberately narrow proofs rather than broad production coverage.
 - Intended direction: keep onboarding new sources through the metadata registry first, then widen ILOSTAT, UN Comtrade, and later sources on top of the existing `raw -> staging -> core -> audit -> mart` path without creating a second ingestion architecture.
 - Non-goal: querying the live web every time an analyst asks for a number. The intended model is still fetch first, store locally, then query the local warehouse.
 

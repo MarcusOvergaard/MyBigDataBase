@@ -8,6 +8,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent / 'tests' / 'fixtures' / 'live_sources' / 'ilostat'
 FIXTURES = {
+    'EMP_RATE_15PLUS_TOTAL': ROOT / 'EMP_RATE_15PLUS_TOTAL_2019_2023.json',
+    'LFPR_15PLUS_TOTAL': ROOT / 'LFPR_15PLUS_TOTAL_2019_2023.json',
     'UNE_RATE_15PLUS_TOTAL': ROOT / 'UNE_RATE_15PLUS_TOTAL_2019_2023.json',
 }
 

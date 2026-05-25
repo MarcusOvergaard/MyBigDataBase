@@ -2,6 +2,8 @@
 DO $$
 DECLARE
     phase2_indicator_count INT;
+    employment_populated_count INT;
+    labor_force_participation_populated_count INT;
     latest_row_count INT;
     unemployment_populated_count INT;
     trade_populated_count INT;
@@ -12,13 +14,15 @@ BEGIN
     INTO phase2_indicator_count
     FROM mart.mart_country_phase2_series_annual
     WHERE indicator_code IN (
+        'EMPLOYMENT_RATE_PCT',
+        'LABOR_FORCE_PARTICIPATION_RATE_PCT',
         'UNEMPLOYMENT_RATE_PCT',
         'TRADE_EXPORTS_CURR_USD',
         'TRADE_IMPORTS_CURR_USD'
     );
 
-    IF phase2_indicator_count <> 3 THEN
-        RAISE EXCEPTION 'Phase 2 starter mart test failed: expected 3 distinct seeded indicators in mart_country_phase2_series_annual, found %', phase2_indicator_count;
+    IF phase2_indicator_count <> 5 THEN
+        RAISE EXCEPTION 'Phase 2 starter mart test failed: expected 5 distinct seeded indicators in mart_country_phase2_series_annual, found %', phase2_indicator_count;
     END IF;
 
     SELECT COUNT(*)
@@ -27,6 +31,26 @@ BEGIN
 
     IF latest_row_count = 0 THEN
         RAISE EXCEPTION 'Phase 2 starter mart test failed: mart_country_phase2_latest returned no rows';
+    END IF;
+
+    SELECT COUNT(*)
+    INTO employment_populated_count
+    FROM mart.mart_country_phase2_latest
+    WHERE employment_rate_pct_year IS NOT NULL
+      AND employment_rate_pct IS NOT NULL;
+
+    IF employment_populated_count = 0 THEN
+        RAISE EXCEPTION 'Phase 2 starter mart test failed: latest Phase 2 view has no populated employment-rate values';
+    END IF;
+
+    SELECT COUNT(*)
+    INTO labor_force_participation_populated_count
+    FROM mart.mart_country_phase2_latest
+    WHERE labor_force_participation_rate_pct_year IS NOT NULL
+      AND labor_force_participation_rate_pct IS NOT NULL;
+
+    IF labor_force_participation_populated_count = 0 THEN
+        RAISE EXCEPTION 'Phase 2 starter mart test failed: latest Phase 2 view has no populated labor-force-participation values';
     END IF;
 
     SELECT COUNT(*)
@@ -100,6 +124,10 @@ $$;
 SELECT
     iso_alpha_3,
     country_name,
+    employment_rate_pct_year,
+    employment_rate_pct,
+    labor_force_participation_rate_pct_year,
+    labor_force_participation_rate_pct,
     unemployment_rate_pct_year,
     unemployment_rate_pct,
     trade_exports_curr_usd_year,

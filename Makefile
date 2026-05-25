@@ -89,11 +89,11 @@ test-live-ifs-contract:
 	@chmod +x scripts/test_live_ifs_inflation_contract.sh
 	@./scripts/test_live_ifs_inflation_contract.sh
 
-# Re-run the live ILOSTAT unemployment slice and assert lineage/publication fields stay intact
+# Re-run the live ILOSTAT labor slice and assert lineage/publication fields stay intact
 # Override FETCH_HELPER for offline fixture-backed runs if needed.
 test-live-ilostat-contract:
-	@chmod +x scripts/test_live_ilostat_unemployment_contract.sh
-	@./scripts/test_live_ilostat_unemployment_contract.sh
+	@chmod +x scripts/test_live_ilostat_labor_contract.sh
+	@./scripts/test_live_ilostat_labor_contract.sh
 
 # Re-run the live UN Comtrade exports/imports slice and assert lineage/publication fields stay intact
 # Override FETCH_HELPER for offline fixture-backed runs if needed.
@@ -109,7 +109,7 @@ test-live-contracts: test-live-wdi-contract test-live-ifs-contract test-live-ilo
 test-live-contracts-offline:
 	@FETCH_HELPER=scripts/mock_fetch_wdi_snapshot.py ./scripts/test_live_wdi_contract.sh
 	@FETCH_HELPER=scripts/mock_fetch_ifs_snapshot.py ./scripts/test_live_ifs_inflation_contract.sh
-	@FETCH_HELPER=scripts/mock_fetch_ilostat_snapshot.py ./scripts/test_live_ilostat_unemployment_contract.sh
+	@FETCH_HELPER=scripts/mock_fetch_ilostat_snapshot.py ./scripts/test_live_ilostat_labor_contract.sh
 	@FETCH_HELPER=scripts/mock_fetch_uncomtrade_snapshot.py ./scripts/test_live_un_comtrade_contract.sh
 
 # Assert the first analyst-facing Phase 2 labor/trade marts after the offline live-contract suite

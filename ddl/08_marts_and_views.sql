@@ -123,6 +123,8 @@ SELECT
     ms.published_at
 FROM mart.mart_country_macro_series_annual ms
 WHERE ms.indicator_code IN (
+    'EMPLOYMENT_RATE_PCT',
+    'LABOR_FORCE_PARTICIPATION_RATE_PCT',
     'UNEMPLOYMENT_RATE_PCT',
     'TRADE_EXPORTS_CURR_USD',
     'TRADE_IMPORTS_CURR_USD'
@@ -144,6 +146,10 @@ SELECT
     r.country_name,
     r.region_name,
     r.income_group,
+    MAX(CASE WHEN r.indicator_code = 'EMPLOYMENT_RATE_PCT' THEN r.observation_year END) AS employment_rate_pct_year,
+    MAX(CASE WHEN r.indicator_code = 'EMPLOYMENT_RATE_PCT' THEN r.observation_value END) AS employment_rate_pct,
+    MAX(CASE WHEN r.indicator_code = 'LABOR_FORCE_PARTICIPATION_RATE_PCT' THEN r.observation_year END) AS labor_force_participation_rate_pct_year,
+    MAX(CASE WHEN r.indicator_code = 'LABOR_FORCE_PARTICIPATION_RATE_PCT' THEN r.observation_value END) AS labor_force_participation_rate_pct,
     MAX(CASE WHEN r.indicator_code = 'UNEMPLOYMENT_RATE_PCT' THEN r.observation_year END) AS unemployment_rate_pct_year,
     MAX(CASE WHEN r.indicator_code = 'UNEMPLOYMENT_RATE_PCT' THEN r.observation_value END) AS unemployment_rate_pct,
     MAX(CASE WHEN r.indicator_code = 'TRADE_EXPORTS_CURR_USD' THEN r.observation_year END) AS trade_exports_curr_usd_year,
