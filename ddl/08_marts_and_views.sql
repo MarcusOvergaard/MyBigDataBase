@@ -90,6 +90,90 @@ SELECT
     ml.latest_published_at
 FROM mart.mart_country_macro_latest ml;
 
+CREATE OR REPLACE VIEW mart.mart_country_phase2_series_annual AS
+SELECT
+    ms.country_key,
+    ms.iso_alpha_3,
+    ms.country_name,
+    ms.region_name,
+    ms.income_group,
+    ms.indicator_key,
+    ms.indicator_code,
+    ms.indicator_name,
+    ms.topic,
+    ms.time_key,
+    ms.observation_year,
+    ms.observation_value,
+    ms.unit_key,
+    ms.unit_code,
+    ms.unit_name,
+    ms.source_system_key,
+    ms.source_code,
+    ms.source_name,
+    ms.source_dataset_key,
+    ms.dataset_code,
+    ms.dataset_name,
+    ms.source_series_key,
+    ms.series_code,
+    ms.series_name,
+    ms.source_batch_key,
+    ms.observation_version_key,
+    ms.selection_method,
+    ms.publication_version_key,
+    ms.published_at
+FROM mart.mart_country_macro_series_annual ms
+WHERE ms.indicator_code IN (
+    'UNEMPLOYMENT_RATE_PCT',
+    'TRADE_EXPORTS_CURR_USD',
+    'TRADE_IMPORTS_CURR_USD'
+);
+
+CREATE OR REPLACE VIEW mart.mart_country_phase2_latest AS
+WITH ranked AS (
+    SELECT
+        ps.*,
+        ROW_NUMBER() OVER (
+            PARTITION BY ps.country_key, ps.indicator_key
+            ORDER BY ps.observation_year DESC, ps.published_at DESC, ps.observation_version_key DESC
+        ) AS recency_rank
+    FROM mart.mart_country_phase2_series_annual ps
+)
+SELECT
+    r.country_key,
+    r.iso_alpha_3,
+    r.country_name,
+    r.region_name,
+    r.income_group,
+    MAX(CASE WHEN r.indicator_code = 'UNEMPLOYMENT_RATE_PCT' THEN r.observation_year END) AS unemployment_rate_pct_year,
+    MAX(CASE WHEN r.indicator_code = 'UNEMPLOYMENT_RATE_PCT' THEN r.observation_value END) AS unemployment_rate_pct,
+    MAX(CASE WHEN r.indicator_code = 'TRADE_EXPORTS_CURR_USD' THEN r.observation_year END) AS trade_exports_curr_usd_year,
+    MAX(CASE WHEN r.indicator_code = 'TRADE_EXPORTS_CURR_USD' THEN r.observation_value END) AS trade_exports_curr_usd,
+    MAX(CASE WHEN r.indicator_code = 'TRADE_IMPORTS_CURR_USD' THEN r.observation_year END) AS trade_imports_curr_usd_year,
+    MAX(CASE WHEN r.indicator_code = 'TRADE_IMPORTS_CURR_USD' THEN r.observation_value END) AS trade_imports_curr_usd,
+    CASE
+        WHEN MAX(CASE WHEN r.indicator_code = 'TRADE_EXPORTS_CURR_USD' THEN r.observation_value END) IS NOT NULL
+         AND MAX(CASE WHEN r.indicator_code = 'TRADE_IMPORTS_CURR_USD' THEN r.observation_value END) IS NOT NULL
+            THEN MAX(CASE WHEN r.indicator_code = 'TRADE_EXPORTS_CURR_USD' THEN r.observation_value END)
+               - MAX(CASE WHEN r.indicator_code = 'TRADE_IMPORTS_CURR_USD' THEN r.observation_value END)
+        ELSE NULL
+    END AS trade_balance_curr_usd,
+    CASE
+        WHEN MAX(CASE WHEN r.indicator_code = 'TRADE_EXPORTS_CURR_USD' THEN r.observation_value END) IS NULL
+          OR MAX(CASE WHEN r.indicator_code = 'TRADE_IMPORTS_CURR_USD' THEN r.observation_value END) IS NULL
+            THEN 'unknown'
+        WHEN MAX(CASE WHEN r.indicator_code = 'TRADE_EXPORTS_CURR_USD' THEN r.observation_value END)
+           > MAX(CASE WHEN r.indicator_code = 'TRADE_IMPORTS_CURR_USD' THEN r.observation_value END)
+            THEN 'surplus'
+        WHEN MAX(CASE WHEN r.indicator_code = 'TRADE_EXPORTS_CURR_USD' THEN r.observation_value END)
+           < MAX(CASE WHEN r.indicator_code = 'TRADE_IMPORTS_CURR_USD' THEN r.observation_value END)
+            THEN 'deficit'
+        ELSE 'balanced'
+    END AS trade_balance_direction,
+    MAX(r.published_at) AS latest_published_at
+FROM ranked r
+WHERE r.recency_rank = 1
+GROUP BY r.country_key, r.iso_alpha_3, r.country_name, r.region_name, r.income_group;
+
 CREATE OR REPLACE VIEW mart.vw_macro_published_with_lineage AS
 SELECT
     fp.country_key,

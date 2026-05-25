@@ -10,7 +10,7 @@ PSQL = $(PSQL_BASE) -d $(DB_NAME)
 export DB_NAME
 export PSQL_CMD = $(PSQL_BASE)
 
-.PHONY: init create-db ddl seed load-sample load-wdi-live load-ifs-live load-ilostat-live load-un-comtrade-live clean-ifs-stale-snapshots build-mart test check-alerts test-live-wdi-contract test-live-ifs-contract test-live-ilostat-contract test-live-un-comtrade-contract test-live-contracts test-live-contracts-offline repeat-load-test all
+.PHONY: init create-db ddl seed load-sample load-wdi-live load-ifs-live load-ilostat-live load-un-comtrade-live clean-ifs-stale-snapshots build-mart test check-alerts test-live-wdi-contract test-live-ifs-contract test-live-ilostat-contract test-live-un-comtrade-contract test-live-contracts test-live-contracts-offline test-phase2-starter-marts-offline repeat-load-test all
 
 all: init
 
@@ -111,6 +111,11 @@ test-live-contracts-offline:
 	@FETCH_HELPER=scripts/mock_fetch_ifs_snapshot.py ./scripts/test_live_ifs_inflation_contract.sh
 	@FETCH_HELPER=scripts/mock_fetch_ilostat_snapshot.py ./scripts/test_live_ilostat_unemployment_contract.sh
 	@FETCH_HELPER=scripts/mock_fetch_uncomtrade_snapshot.py ./scripts/test_live_un_comtrade_contract.sh
+
+# Assert the first analyst-facing Phase 2 labor/trade marts after the offline live-contract suite
+test-phase2-starter-marts-offline:
+	@echo "Running Phase 2 starter mart regression queries..."
+	@$(PSQL) -f queries/test_phase2_starter_marts.sql
 
 # Re-run the sample loaders and assert the published contract stays stable
 repeat-load-test:

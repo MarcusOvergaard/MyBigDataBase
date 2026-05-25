@@ -95,6 +95,11 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
    make test-live-contracts-offline
    ```
    This swaps each live fetcher for a fixture-backed mock helper, so the warehouse contract can be verified without depending on external APIs.
+13. **Assert the first Phase 2 labor/trade marts after the offline suite**:
+   ```bash
+   make test-phase2-starter-marts-offline
+   ```
+   This verifies that the seeded ILOSTAT unemployment and UN Comtrade exports/imports indicators populate the analyst-facing Phase 2 starter marts correctly, including the derived trade-balance fields.
 
 ## Schema Architecture
 
@@ -112,7 +117,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 - `ddl/05_core_dimensions.sql`: `core.dim_country`, `core.dim_indicator`, `core.dim_source`, `core.dim_dataset`, and `core.dim_time`
 - `ddl/06_core_facts.sql`: `core.fact_country_indicator_version` and `core.fact_country_indicator_published`
 - `ddl/07_audit_tables.sql`: `audit.pipeline_run`, `audit.data_quality_event`, `audit.revision_event`, `audit.publication_version`, and `audit.dataset_freshness`
-- `ddl/08_marts_and_views.sql`: first Phase 1 marts and diagnostic views on the published/audit spine, including `mart.dataset_pipeline_health` for dataset-level operating health and `mart.dataset_pipeline_alerts` for alert-only monitoring
+- `ddl/08_marts_and_views.sql`: first Phase 1 marts and diagnostic views on the published/audit spine, including `mart.dataset_pipeline_health` for dataset-level operating health, `mart.dataset_pipeline_alerts` for alert-only monitoring, and the first Phase 2 starter marts for labor/trade indicators.
 - `ddl/09_constraints_indexes.sql`: first Wave 8 hardening unit for constraints, indexes, and publish guards
 - `ddl/10_canonical_contract_followthrough.sql`: additive canonical-contract enforcement for comparability/source-switch lineage, including `mart.vw_macro_source_selection_lineage` for flattened source-selection diagnostics
 - `seeds/01_core_dimension_seeds.sql`: conformed core-dimension sync from `ref`
@@ -147,6 +152,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 - `scripts/load_ilostat_live.sh`: first narrow live ILOSTAT loader for annual total unemployment rate ages 15+, now defaulting to the canonical seeded country basket from `ref.country`, recorded as snapshot-backed evidence and published through the same warehouse contract.
 - `scripts/load_un_comtrade_live.sh`: first narrow live UN Comtrade loader for annual total exports/imports against World partner totals, now using targeted reporter-code requests derived from the canonical seeded country basket, recorded as snapshot-backed evidence and published through the same warehouse contract.
 - `scripts/check_pipeline_alerts.sh`: exits non-zero when `mart.dataset_pipeline_alerts` contains any active alerts, for CI/cron health checks.
+- `queries/test_phase2_starter_marts.sql`: regression checks for the first labor/trade Phase 2 starter marts built from the seeded ILOSTAT and UN Comtrade slices.
 - `scripts/fetch_http_to_snapshot.py`: reusable fetch helper for saving HTTP payloads as local evidence files.
 - `scripts/fetch_uncomtrade_snapshot.py`: UN Comtrade-specific fetch helper that handles CSRF + POST query semantics and persists raw response snapshots.
 - `queries/`: SQL scripts for analysis.
@@ -165,7 +171,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 
 ## Current status vs future goal
 - Current status: the warehouse structure, publication logic, QA surfaces, and analyst views are working locally with sample WDI and IFS files, and the first narrow live WDI, IFS, ILOSTAT, and UN Comtrade loaders now run end to end.
-- Not done yet: production-grade source coverage across labor, trade, and other domains; the live specialist-source slices now cover the seeded canonical country basket for ILOSTAT and targeted UN Comtrade reporter requests, but they are still deliberately narrow proofs rather than broad production coverage.
+- Not done yet: production-grade source coverage across labor, trade, and other domains; the live specialist-source slices now cover the seeded canonical country basket for ILOSTAT and targeted UN Comtrade reporter requests, and the repo now exposes those published results through first-pass Phase 2 starter marts, but they are still deliberately narrow proofs rather than broad production coverage.
 - Intended direction: keep onboarding new sources through the metadata registry first, then widen ILOSTAT, UN Comtrade, and later sources on top of the existing `raw -> staging -> core -> audit -> mart` path without creating a second ingestion architecture.
 - Non-goal: querying the live web every time an analyst asks for a number. The intended model is still fetch first, store locally, then query the local warehouse.
 
