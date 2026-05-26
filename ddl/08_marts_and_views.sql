@@ -2,6 +2,10 @@
 -- These analyst-facing surfaces build from the new published/audit contract rather than the legacy dw path.
 
 DROP VIEW IF EXISTS mart.country_latest_macro;
+DROP VIEW IF EXISTS mart.mart_country_phase2_latest CASCADE;
+DROP VIEW IF EXISTS mart.mart_country_macro_plus_external_latest CASCADE;
+DROP VIEW IF EXISTS mart.mart_country_trade_external_panel_annual CASCADE;
+DROP VIEW IF EXISTS mart.mart_country_inflation_series_annual CASCADE;
 
 CREATE OR REPLACE VIEW mart.mart_country_macro_series_annual AS
 SELECT
@@ -128,10 +132,7 @@ WHERE ms.indicator_code IN (
     'UNEMPLOYMENT_RATE_PCT'
 );
 
-CREATE OR REPLACE VIEW mart.mart_country_phase2_series_annual AS
-SELECT *
-FROM mart.mart_country_labor_series_annual
-UNION ALL
+CREATE OR REPLACE VIEW mart.mart_country_inflation_series_annual AS
 SELECT
     ms.country_key,
     ms.iso_alpha_3,
@@ -163,12 +164,148 @@ SELECT
     ms.publication_version_key,
     ms.published_at
 FROM mart.mart_country_macro_series_annual ms
-WHERE ms.indicator_code IN (
-    'TRADE_EXPORTS_CURR_USD',
-    'TRADE_IMPORTS_CURR_USD'
-);
+WHERE ms.indicator_code = 'INFLATION_CPI_PCT';
 
-CREATE OR REPLACE VIEW mart.mart_country_phase2_latest AS
+CREATE OR REPLACE VIEW mart.mart_country_trade_external_panel_annual AS
+WITH trade_rows AS (
+    SELECT
+        ms.country_key,
+        ms.iso_alpha_3,
+        ms.country_name,
+        ms.region_name,
+        ms.income_group,
+        ms.indicator_key,
+        ms.indicator_code,
+        ms.indicator_name,
+        ms.topic,
+        ms.time_key,
+        ms.observation_year,
+        ms.observation_value,
+        ms.unit_key,
+        ms.unit_code,
+        ms.unit_name,
+        ms.source_system_key,
+        ms.source_code,
+        ms.source_name,
+        ms.source_dataset_key,
+        ms.dataset_code,
+        ms.dataset_name,
+        ms.source_series_key,
+        ms.series_code,
+        ms.series_name,
+        ms.source_batch_key,
+        ms.observation_version_key,
+        ms.selection_method,
+        ms.publication_version_key,
+        ms.published_at
+    FROM mart.mart_country_macro_series_annual ms
+    WHERE ms.indicator_code IN (
+        'TRADE_EXPORTS_CURR_USD',
+        'TRADE_IMPORTS_CURR_USD'
+    )
+),
+trade_pairs AS (
+    SELECT
+        tr.country_key,
+        tr.time_key,
+        MAX(CASE WHEN tr.indicator_code = 'TRADE_EXPORTS_CURR_USD' THEN tr.observation_value END) AS trade_exports_curr_usd,
+        MAX(CASE WHEN tr.indicator_code = 'TRADE_IMPORTS_CURR_USD' THEN tr.observation_value END) AS trade_imports_curr_usd
+    FROM trade_rows tr
+    GROUP BY tr.country_key, tr.time_key
+)
+SELECT
+    tr.country_key,
+    tr.iso_alpha_3,
+    tr.country_name,
+    tr.region_name,
+    tr.income_group,
+    tr.indicator_key,
+    tr.indicator_code,
+    tr.indicator_name,
+    tr.topic,
+    tr.time_key,
+    tr.observation_year,
+    tr.observation_value,
+    tr.unit_key,
+    tr.unit_code,
+    tr.unit_name,
+    tr.source_system_key,
+    tr.source_code,
+    tr.source_name,
+    tr.source_dataset_key,
+    tr.dataset_code,
+    tr.dataset_name,
+    tr.source_series_key,
+    tr.series_code,
+    tr.series_name,
+    tr.source_batch_key,
+    tr.observation_version_key,
+    tr.selection_method,
+    tr.publication_version_key,
+    tr.published_at,
+    tp.trade_exports_curr_usd,
+    tp.trade_imports_curr_usd,
+    CASE
+        WHEN tp.trade_exports_curr_usd IS NOT NULL
+         AND tp.trade_imports_curr_usd IS NOT NULL
+            THEN tp.trade_exports_curr_usd - tp.trade_imports_curr_usd
+        ELSE NULL
+    END AS trade_balance_curr_usd,
+    CASE
+        WHEN tp.trade_exports_curr_usd IS NULL
+          OR tp.trade_imports_curr_usd IS NULL
+            THEN 'unknown'
+        WHEN tp.trade_exports_curr_usd > tp.trade_imports_curr_usd
+            THEN 'surplus'
+        WHEN tp.trade_exports_curr_usd < tp.trade_imports_curr_usd
+            THEN 'deficit'
+        ELSE 'balanced'
+    END AS trade_balance_direction
+FROM trade_rows tr
+JOIN trade_pairs tp
+  ON tp.country_key = tr.country_key
+ AND tp.time_key = tr.time_key;
+
+CREATE OR REPLACE VIEW mart.mart_country_phase2_series_annual AS
+SELECT *
+FROM mart.mart_country_labor_series_annual
+UNION ALL
+SELECT *
+FROM mart.mart_country_inflation_series_annual
+UNION ALL
+SELECT
+    te.country_key,
+    te.iso_alpha_3,
+    te.country_name,
+    te.region_name,
+    te.income_group,
+    te.indicator_key,
+    te.indicator_code,
+    te.indicator_name,
+    te.topic,
+    te.time_key,
+    te.observation_year,
+    te.observation_value,
+    te.unit_key,
+    te.unit_code,
+    te.unit_name,
+    te.source_system_key,
+    te.source_code,
+    te.source_name,
+    te.source_dataset_key,
+    te.dataset_code,
+    te.dataset_name,
+    te.source_series_key,
+    te.series_code,
+    te.series_name,
+    te.source_batch_key,
+    te.observation_version_key,
+    te.selection_method,
+    te.publication_version_key,
+    te.published_at
+FROM mart.mart_country_trade_external_panel_annual te;
+
+CREATE OR REPLACE VIEW mart.mart_country_macro_plus_external_latest AS
 WITH ranked AS (
     SELECT
         ps.*,
@@ -179,17 +316,25 @@ WITH ranked AS (
     FROM mart.mart_country_phase2_series_annual ps
 )
 SELECT
-    r.country_key,
-    r.iso_alpha_3,
-    r.country_name,
-    r.region_name,
-    r.income_group,
+    ml.country_key,
+    ml.iso_alpha_3,
+    ml.country_name,
+    ml.region_name,
+    ml.income_group,
+    ml.gdp_curr_usd_year,
+    ml.gdp_curr_usd,
+    ml.gdp_pc_curr_usd_year,
+    ml.gdp_pc_curr_usd,
+    ml.pop_total_year,
+    ml.pop_total,
     MAX(CASE WHEN r.indicator_code = 'EMPLOYMENT_RATE_PCT' THEN r.observation_year END) AS employment_rate_pct_year,
     MAX(CASE WHEN r.indicator_code = 'EMPLOYMENT_RATE_PCT' THEN r.observation_value END) AS employment_rate_pct,
     MAX(CASE WHEN r.indicator_code = 'LABOR_FORCE_PARTICIPATION_RATE_PCT' THEN r.observation_year END) AS labor_force_participation_rate_pct_year,
     MAX(CASE WHEN r.indicator_code = 'LABOR_FORCE_PARTICIPATION_RATE_PCT' THEN r.observation_value END) AS labor_force_participation_rate_pct,
     MAX(CASE WHEN r.indicator_code = 'UNEMPLOYMENT_RATE_PCT' THEN r.observation_year END) AS unemployment_rate_pct_year,
     MAX(CASE WHEN r.indicator_code = 'UNEMPLOYMENT_RATE_PCT' THEN r.observation_value END) AS unemployment_rate_pct,
+    MAX(CASE WHEN r.indicator_code = 'INFLATION_CPI_PCT' THEN r.observation_year END) AS inflation_cpi_pct_year,
+    MAX(CASE WHEN r.indicator_code = 'INFLATION_CPI_PCT' THEN r.observation_value END) AS inflation_cpi_pct,
     MAX(CASE WHEN r.indicator_code = 'TRADE_EXPORTS_CURR_USD' THEN r.observation_year END) AS trade_exports_curr_usd_year,
     MAX(CASE WHEN r.indicator_code = 'TRADE_EXPORTS_CURR_USD' THEN r.observation_value END) AS trade_exports_curr_usd,
     MAX(CASE WHEN r.indicator_code = 'TRADE_IMPORTS_CURR_USD' THEN r.observation_year END) AS trade_imports_curr_usd_year,
@@ -213,10 +358,48 @@ SELECT
             THEN 'deficit'
         ELSE 'balanced'
     END AS trade_balance_direction,
-    MAX(r.published_at) AS latest_published_at
-FROM ranked r
-WHERE r.recency_rank = 1
-GROUP BY r.country_key, r.iso_alpha_3, r.country_name, r.region_name, r.income_group;
+    GREATEST(ml.latest_published_at, COALESCE(MAX(r.published_at), ml.latest_published_at)) AS latest_published_at
+FROM mart.mart_country_macro_latest ml
+LEFT JOIN ranked r
+  ON r.country_key = ml.country_key
+ AND r.recency_rank = 1
+GROUP BY
+    ml.country_key,
+    ml.iso_alpha_3,
+    ml.country_name,
+    ml.region_name,
+    ml.income_group,
+    ml.gdp_curr_usd_year,
+    ml.gdp_curr_usd,
+    ml.gdp_pc_curr_usd_year,
+    ml.gdp_pc_curr_usd,
+    ml.pop_total_year,
+    ml.pop_total,
+    ml.latest_published_at;
+
+CREATE OR REPLACE VIEW mart.mart_country_phase2_latest AS
+SELECT
+    mpe.country_key,
+    mpe.iso_alpha_3,
+    mpe.country_name,
+    mpe.region_name,
+    mpe.income_group,
+    mpe.employment_rate_pct_year,
+    mpe.employment_rate_pct,
+    mpe.labor_force_participation_rate_pct_year,
+    mpe.labor_force_participation_rate_pct,
+    mpe.unemployment_rate_pct_year,
+    mpe.unemployment_rate_pct,
+    mpe.inflation_cpi_pct_year,
+    mpe.inflation_cpi_pct,
+    mpe.trade_exports_curr_usd_year,
+    mpe.trade_exports_curr_usd,
+    mpe.trade_imports_curr_usd_year,
+    mpe.trade_imports_curr_usd,
+    mpe.trade_balance_curr_usd,
+    mpe.trade_balance_direction,
+    mpe.latest_published_at
+FROM mart.mart_country_macro_plus_external_latest mpe;
 
 CREATE OR REPLACE VIEW mart.vw_macro_published_with_lineage AS
 SELECT
@@ -721,27 +904,50 @@ conflicted_keys AS (
 ),
 selected_rows AS (
     SELECT
-        m.country_key,
-        m.indicator_key,
-        m.time_key,
-        m.observation_version_key AS selected_observation_version_key,
-        m.dataset_code AS selected_dataset_code,
-        m.dataset_name AS selected_dataset_name,
-        m.source_code AS selected_source_code,
-        m.series_code AS selected_series_code,
-        m.observation_value AS selected_observation_value,
-        m.selection_method AS selected_selection_method,
-        m.priority_rank AS selected_priority_rank,
-        m.is_override AS selected_is_override,
-        m.selection_rationale AS selected_selection_rationale,
-        m.publication_version_code,
-        m.published_at AS selected_published_at
-    FROM mart.vw_macro_source_selection_lineage m
-    WHERE m.indicator_code IN (
-        'EMPLOYMENT_RATE_PCT',
-        'LABOR_FORCE_PARTICIPATION_RATE_PCT',
-        'UNEMPLOYMENT_RATE_PCT'
-    )
+        ranked_selected_rows.country_key,
+        ranked_selected_rows.indicator_key,
+        ranked_selected_rows.time_key,
+        ranked_selected_rows.selected_observation_version_key,
+        ranked_selected_rows.selected_dataset_code,
+        ranked_selected_rows.selected_dataset_name,
+        ranked_selected_rows.selected_source_code,
+        ranked_selected_rows.selected_series_code,
+        ranked_selected_rows.selected_observation_value,
+        ranked_selected_rows.selected_selection_method,
+        ranked_selected_rows.selected_priority_rank,
+        ranked_selected_rows.selected_is_override,
+        ranked_selected_rows.selected_selection_rationale,
+        ranked_selected_rows.publication_version_code,
+        ranked_selected_rows.selected_published_at
+    FROM (
+        SELECT
+            m.country_key,
+            m.indicator_key,
+            m.time_key,
+            m.observation_version_key AS selected_observation_version_key,
+            m.dataset_code AS selected_dataset_code,
+            m.dataset_name AS selected_dataset_name,
+            m.source_code AS selected_source_code,
+            m.series_code AS selected_series_code,
+            m.observation_value AS selected_observation_value,
+            m.selection_method AS selected_selection_method,
+            m.priority_rank AS selected_priority_rank,
+            m.is_override AS selected_is_override,
+            m.selection_rationale AS selected_selection_rationale,
+            m.publication_version_code,
+            m.published_at AS selected_published_at,
+            ROW_NUMBER() OVER (
+                PARTITION BY m.country_key, m.indicator_key, m.time_key
+                ORDER BY m.published_at DESC, m.publication_version_code DESC, m.observation_version_key DESC
+            ) AS publication_recency_rank
+        FROM mart.vw_macro_source_selection_lineage m
+        WHERE m.indicator_code IN (
+            'EMPLOYMENT_RATE_PCT',
+            'LABOR_FORCE_PARTICIPATION_RATE_PCT',
+            'UNEMPLOYMENT_RATE_PCT'
+        )
+    ) ranked_selected_rows
+    WHERE ranked_selected_rows.publication_recency_rank = 1
 )
 SELECT
     lv.country_key,
@@ -796,6 +1002,109 @@ JOIN selected_rows sr
  AND sr.indicator_key = lv.indicator_key
  AND sr.time_key = lv.time_key;
 
+CREATE OR REPLACE VIEW mart.vw_labor_source_conflicts_latest AS
+WITH ranked_conflicts AS (
+    SELECT
+        lc.*,
+        ROW_NUMBER() OVER (
+            PARTITION BY lc.country_key, lc.indicator_key, lc.time_key, lc.source_dataset_key
+            ORDER BY COALESCE(lc.source_released_at, lc.first_seen_at) DESC,
+                     lc.source_batch_key DESC,
+                     lc.observation_version_key DESC
+        ) AS dataset_recency_rank
+    FROM mart.vw_labor_source_conflicts lc
+)
+SELECT
+    country_key,
+    iso_alpha_3,
+    country_name,
+    region_name,
+    income_group,
+    indicator_key,
+    indicator_code,
+    indicator_name,
+    time_key,
+    observation_year,
+    observation_version_key,
+    observation_value,
+    source_system_key,
+    source_code,
+    source_name,
+    source_dataset_key,
+    dataset_code,
+    dataset_name,
+    source_series_key,
+    series_code,
+    series_name,
+    source_batch_key,
+    source_released_at,
+    selection_method,
+    quality_status,
+    status_code,
+    is_latest_source_version,
+    first_seen_at,
+    superseded_at,
+    selected_observation_version_key,
+    selected_dataset_code,
+    selected_dataset_name,
+    selected_source_code,
+    selected_series_code,
+    selected_observation_value,
+    selected_selection_method,
+    selected_priority_rank,
+    selected_is_override,
+    selected_selection_rationale,
+    publication_version_code,
+    selected_published_at,
+    is_selected_published_row
+FROM ranked_conflicts
+WHERE dataset_recency_rank = 1;
+
+CREATE OR REPLACE VIEW mart.vw_labor_source_conflict_summary_latest AS
+SELECT
+    country_key,
+    iso_alpha_3,
+    country_name,
+    region_name,
+    income_group,
+    indicator_key,
+    indicator_code,
+    indicator_name,
+    time_key,
+    observation_year,
+    COUNT(*) AS competing_dataset_count,
+    MAX(selected_dataset_code) AS selected_dataset_code,
+    MAX(selected_dataset_name) AS selected_dataset_name,
+    MAX(selected_source_code) AS selected_source_code,
+    MAX(selected_series_code) AS selected_series_code,
+    MAX(selected_observation_value) AS selected_observation_value,
+    MAX(selected_selection_method) AS selected_selection_method,
+    MAX(selected_priority_rank) AS selected_priority_rank,
+    BOOL_OR(selected_is_override) AS selected_is_override,
+    MAX(selected_selection_rationale) AS selected_selection_rationale,
+    MAX(publication_version_code) AS publication_version_code,
+    MAX(selected_published_at) AS selected_published_at,
+    MIN(observation_value) AS min_conflicting_value,
+    MAX(observation_value) AS max_conflicting_value,
+    MAX(observation_value) - MIN(observation_value) AS conflicting_value_spread,
+    STRING_AGG(
+        dataset_code || '=' || observation_value::TEXT || CASE WHEN is_selected_published_row THEN ' [selected]' ELSE '' END,
+        ' | '
+        ORDER BY dataset_code
+    ) AS candidate_dataset_values
+FROM mart.vw_labor_source_conflicts_latest
+GROUP BY
+    country_key,
+    iso_alpha_3,
+    country_name,
+    region_name,
+    income_group,
+    indicator_key,
+    indicator_code,
+    indicator_name,
+    time_key,
+    observation_year;
+
 CREATE OR REPLACE VIEW mart.vw_labor_revision_history AS
 SELECT
     mrh.revision_event_key,
@@ -825,3 +1134,301 @@ WHERE mrh.indicator_code IN (
     'LABOR_FORCE_PARTICIPATION_RATE_PCT',
     'UNEMPLOYMENT_RATE_PCT'
 );
+
+CREATE OR REPLACE VIEW mart.vw_inflation_source_conflicts AS
+WITH inflation_versions AS (
+    SELECT
+        fv.observation_version_key,
+        fv.country_key,
+        dc.iso_alpha_3,
+        dc.country_name,
+        dc.region_name,
+        dc.income_group,
+        fv.indicator_key,
+        di.indicator_code,
+        di.indicator_name,
+        fv.time_key,
+        dt.calendar_year AS observation_year,
+        fv.observation_value,
+        fv.source_system_key,
+        ds.source_code,
+        ds.source_name,
+        fv.source_dataset_key,
+        dd.dataset_code,
+        dd.dataset_name,
+        fv.source_series_key,
+        rs.series_code,
+        rs.series_name,
+        fv.source_batch_key,
+        fv.source_released_at,
+        fv.selection_method,
+        fv.quality_status,
+        fv.status_code,
+        fv.is_latest_source_version,
+        fv.first_seen_at,
+        fv.superseded_at
+    FROM core.fact_country_indicator_version fv
+    JOIN core.dim_country dc ON dc.country_key = fv.country_key
+    JOIN core.dim_indicator di ON di.indicator_key = fv.indicator_key
+    JOIN core.dim_time dt ON dt.time_key = fv.time_key
+    JOIN core.dim_source ds ON ds.source_system_key = fv.source_system_key
+    JOIN core.dim_dataset dd ON dd.source_dataset_key = fv.source_dataset_key
+    LEFT JOIN ref.source_series rs ON rs.source_series_key = fv.source_series_key
+    WHERE di.indicator_code = 'INFLATION_CPI_PCT'
+),
+conflicted_keys AS (
+    SELECT
+        country_key,
+        indicator_key,
+        time_key
+    FROM inflation_versions
+    GROUP BY country_key, indicator_key, time_key
+    HAVING COUNT(DISTINCT source_dataset_key) > 1
+),
+selected_rows AS (
+    SELECT
+        ranked_selected_rows.country_key,
+        ranked_selected_rows.indicator_key,
+        ranked_selected_rows.time_key,
+        ranked_selected_rows.selected_observation_version_key,
+        ranked_selected_rows.selected_dataset_code,
+        ranked_selected_rows.selected_dataset_name,
+        ranked_selected_rows.selected_source_code,
+        ranked_selected_rows.selected_series_code,
+        ranked_selected_rows.selected_observation_value,
+        ranked_selected_rows.selected_selection_method,
+        ranked_selected_rows.selected_priority_rank,
+        ranked_selected_rows.selected_is_override,
+        ranked_selected_rows.selected_selection_rationale,
+        ranked_selected_rows.publication_version_code,
+        ranked_selected_rows.selected_published_at
+    FROM (
+        SELECT
+            m.country_key,
+            m.indicator_key,
+            m.time_key,
+            m.observation_version_key AS selected_observation_version_key,
+            m.dataset_code AS selected_dataset_code,
+            m.dataset_name AS selected_dataset_name,
+            m.source_code AS selected_source_code,
+            m.series_code AS selected_series_code,
+            m.observation_value AS selected_observation_value,
+            m.selection_method AS selected_selection_method,
+            m.priority_rank AS selected_priority_rank,
+            m.is_override AS selected_is_override,
+            m.selection_rationale AS selected_selection_rationale,
+            m.publication_version_code,
+            m.published_at AS selected_published_at,
+            ROW_NUMBER() OVER (
+                PARTITION BY m.country_key, m.indicator_key, m.time_key
+                ORDER BY m.published_at DESC, m.publication_version_code DESC, m.observation_version_key DESC
+            ) AS publication_recency_rank
+        FROM mart.vw_macro_source_selection_lineage m
+        WHERE m.indicator_code = 'INFLATION_CPI_PCT'
+    ) ranked_selected_rows
+    WHERE ranked_selected_rows.publication_recency_rank = 1
+)
+SELECT
+    iv.country_key,
+    iv.iso_alpha_3,
+    iv.country_name,
+    iv.region_name,
+    iv.income_group,
+    iv.indicator_key,
+    iv.indicator_code,
+    iv.indicator_name,
+    iv.time_key,
+    iv.observation_year,
+    iv.observation_version_key,
+    iv.observation_value,
+    iv.source_system_key,
+    iv.source_code,
+    iv.source_name,
+    iv.source_dataset_key,
+    iv.dataset_code,
+    iv.dataset_name,
+    iv.source_series_key,
+    iv.series_code,
+    iv.series_name,
+    iv.source_batch_key,
+    iv.source_released_at,
+    iv.selection_method,
+    iv.quality_status,
+    iv.status_code,
+    iv.is_latest_source_version,
+    iv.first_seen_at,
+    iv.superseded_at,
+    sr.selected_observation_version_key,
+    sr.selected_dataset_code,
+    sr.selected_dataset_name,
+    sr.selected_source_code,
+    sr.selected_series_code,
+    sr.selected_observation_value,
+    sr.selected_selection_method,
+    sr.selected_priority_rank,
+    sr.selected_is_override,
+    sr.selected_selection_rationale,
+    sr.publication_version_code,
+    sr.selected_published_at,
+    (iv.observation_version_key = sr.selected_observation_version_key) AS is_selected_published_row
+FROM inflation_versions iv
+JOIN conflicted_keys ck
+  ON ck.country_key = iv.country_key
+ AND ck.indicator_key = iv.indicator_key
+ AND ck.time_key = iv.time_key
+JOIN selected_rows sr
+  ON sr.country_key = iv.country_key
+ AND sr.indicator_key = iv.indicator_key
+ AND sr.time_key = iv.time_key;
+
+CREATE OR REPLACE VIEW mart.vw_inflation_source_conflicts_latest AS
+WITH ranked_conflicts AS (
+    SELECT
+        ic.*,
+        ROW_NUMBER() OVER (
+            PARTITION BY ic.country_key, ic.indicator_key, ic.time_key, ic.source_dataset_key
+            ORDER BY COALESCE(ic.source_released_at, ic.first_seen_at) DESC,
+                     ic.source_batch_key DESC,
+                     ic.observation_version_key DESC
+        ) AS dataset_recency_rank
+    FROM mart.vw_inflation_source_conflicts ic
+)
+SELECT
+    country_key,
+    iso_alpha_3,
+    country_name,
+    region_name,
+    income_group,
+    indicator_key,
+    indicator_code,
+    indicator_name,
+    time_key,
+    observation_year,
+    observation_version_key,
+    observation_value,
+    source_system_key,
+    source_code,
+    source_name,
+    source_dataset_key,
+    dataset_code,
+    dataset_name,
+    source_series_key,
+    series_code,
+    series_name,
+    source_batch_key,
+    source_released_at,
+    selection_method,
+    quality_status,
+    status_code,
+    is_latest_source_version,
+    first_seen_at,
+    superseded_at,
+    selected_observation_version_key,
+    selected_dataset_code,
+    selected_dataset_name,
+    selected_source_code,
+    selected_series_code,
+    selected_observation_value,
+    selected_selection_method,
+    selected_priority_rank,
+    selected_is_override,
+    selected_selection_rationale,
+    publication_version_code,
+    selected_published_at,
+    is_selected_published_row
+FROM ranked_conflicts
+WHERE dataset_recency_rank = 1;
+
+CREATE OR REPLACE VIEW mart.vw_trade_external_revision_history AS
+SELECT
+    mrh.revision_event_key,
+    mrh.changed_at,
+    mrh.change_type,
+    mrh.iso_alpha_3,
+    mrh.country_name,
+    mrh.indicator_code,
+    mrh.indicator_name,
+    mrh.observation_year,
+    mrh.previous_value,
+    mrh.new_value,
+    mrh.previous_source_batch_key,
+    mrh.new_source_batch_key,
+    mrh.previous_dataset_code,
+    mrh.new_dataset_code,
+    mrh.pipeline_run_key,
+    mrh.pipeline_run_status,
+    mrh.notes,
+    mrh.previous_selection_rule_version_ref,
+    mrh.new_selection_rule_version_ref,
+    mrh.new_comparability_break_flag,
+    mrh.new_comparability_break_note
+FROM mart.vw_macro_revision_history mrh
+WHERE mrh.indicator_code IN (
+    'TRADE_EXPORTS_CURR_USD',
+    'TRADE_IMPORTS_CURR_USD'
+);
+
+CREATE OR REPLACE VIEW mart.vw_domain_qa_summary_phase2 AS
+WITH phase2_datasets AS (
+    SELECT
+        sd.source_dataset_key,
+        sd.dataset_code,
+        sd.dataset_name,
+        ss.source_code,
+        ss.source_name
+    FROM ref.source_dataset sd
+    JOIN ref.source_system ss ON ss.source_system_key = sd.source_system_key
+    WHERE sd.dataset_code IN ('IFS', 'ILOSTAT', 'UN_COMTRADE_ANNUAL')
+),
+phase2_indicator_stats AS (
+    SELECT
+        fp.source_dataset_key,
+        COUNT(*) AS current_phase2_published_row_count,
+        COUNT(DISTINCT fp.indicator_key) AS current_phase2_indicator_count,
+        MIN(fp.observation_year) AS min_phase2_observation_year,
+        MAX(fp.observation_year) AS max_phase2_observation_year
+    FROM core.fact_country_indicator_published fp
+    JOIN core.dim_indicator di ON di.indicator_key = fp.indicator_key
+    WHERE di.indicator_code IN (
+        'EMPLOYMENT_RATE_PCT',
+        'LABOR_FORCE_PARTICIPATION_RATE_PCT',
+        'UNEMPLOYMENT_RATE_PCT',
+        'INFLATION_CPI_PCT',
+        'TRADE_EXPORTS_CURR_USD',
+        'TRADE_IMPORTS_CURR_USD'
+    )
+    GROUP BY fp.source_dataset_key
+)
+SELECT
+    pd.source_dataset_key,
+    pd.dataset_code,
+    pd.dataset_name,
+    pd.source_code,
+    pd.source_name,
+    h.freshness_status,
+    h.is_stale,
+    h.latest_successful_fetch_at,
+    h.latest_source_released_at,
+    h.latest_published_at,
+    h.latest_published_year,
+    h.latest_source_batch_key,
+    h.latest_batch_external_id,
+    h.latest_batch_fetched_at,
+    h.latest_batch_ingest_status,
+    h.latest_batch_row_count_reported,
+    h.latest_pipeline_run_key,
+    h.latest_pipeline_status,
+    h.latest_publish_run_key,
+    h.latest_publish_status,
+    h.latest_publish_total_dq_event_count,
+    h.latest_publish_blocking_qa_event_count,
+    h.latest_publish_warning_qa_event_count,
+    h.latest_publish_error_qa_event_count,
+    COALESCE(ps.current_phase2_published_row_count, 0) AS current_phase2_published_row_count,
+    COALESCE(ps.current_phase2_indicator_count, 0) AS current_phase2_indicator_count,
+    ps.min_phase2_observation_year,
+    ps.max_phase2_observation_year,
+    h.anomaly_flags
+FROM phase2_datasets pd
+JOIN mart.dataset_pipeline_health h ON h.source_dataset_key = pd.source_dataset_key
+LEFT JOIN phase2_indicator_stats ps ON ps.source_dataset_key = pd.source_dataset_key;

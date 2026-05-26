@@ -55,51 +55,66 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
    ```
    This fetches a small real WDI API slice for the active Phase 1 indicators, stores the raw JSON snapshots under `ingest/snapshots/wdi/WDI/`, records those files in `raw.source_snapshot`, lands the rows in `raw.wdi_country_indicator_annual`, and then reuses the same `raw -> staging -> core -> audit -> mart` pipeline.
 
-5. **Optional: load the first narrow live IFS slice**:
+5. **Optional: load the first narrow live WDI labor overlap slice**:
+   ```bash
+   make load-wdi-labor-live
+   ```
+   This fetches a deliberately tiny real WDI labor slice for `DEU` in `2022`, writes snapshot JSON plus a per-run manifest under `ingest/snapshots/wdi/WDI/`, records the evidence in `raw.source_snapshot`, lands the rows in `raw.wdi_country_indicator_annual`, and proves the labor conflict diagnostics against the preferred ILOSTAT rows using real source data end to end.
+
+6. **Optional: load the first narrow live IFS slice**:
    ```bash
    make load-ifs-live
    ```
    This fetches a small real IMF DataMapper slice plus country metadata, stores the JSON snapshots under `ingest/snapshots/ifs/IFS/`, writes a per-run manifest there, records the snapshot files in `raw.source_snapshot`, lands the rows in `raw.ifs_country_indicator_annual`, and then reuses the same `raw -> staging -> core -> audit -> mart` pipeline. The live IFS loader now resolves its requested IMF indicator codes from warehouse metadata instead of a shell hardcode, records both API indicator codes and source-series codes in batch lineage, and deletes incomplete run snapshots if a run fails mid-flight.
 
-6. **Optional: clean stale IFS snapshot files**:
+7. **Optional: clean stale IFS snapshot files**:
    ```bash
    make clean-ifs-stale-snapshots
    ```
    This removes IFS snapshot JSON files under `ingest/snapshots/ifs/IFS/` that are not referenced by any successful per-run manifest.
-7. **Run Phase 1 validation queries**:
+8. **Run Phase 1 validation queries**:
    ```bash
    make test
    ```
-8. **Fail fast if there are active pipeline alerts**:
+9. **Fail fast if there are active pipeline alerts**:
    ```bash
    make check-alerts
    ```
    This exits non-zero when `mart.dataset_pipeline_alerts` contains any rows, so it is suitable for CI, cron, or a simple health-check wrapper.
-9. **Re-run the live WDI backbone contract check**:
+10. **Re-run the live WDI backbone contract check**:
    ```bash
    make test-live-wdi-contract
    ```
    This reruns the WDI backbone slice and fails if the latest live WDI batch loses its request lineage fields, drops the expected WDI indicator mappings, fails to normalize all four backbone indicators, or leaves pipeline alerts behind.
-10. **Re-run the live IFS inflation contract check**:
+11. **Re-run the live WDI labor overlap contract check**:
+   ```bash
+   make test-live-wdi-labor-contract
+   ```
+   This reruns the narrow WDI labor overlap slice and fails if the latest live WDI labor batch loses its labor-series lineage arrays, stops normalizing the three overlap indicators, or leaves pipeline alerts behind.
+
+12. **Re-run the live IFS inflation contract check**:
    ```bash
    make test-live-ifs-contract
    ```
    This reruns the IFS specialist-source slice and fails if the latest live IFS batch loses its metadata-driven indicator lineage, fails to publish IFS-backed inflation rows, or leaves pipeline alerts behind.
-11. **Re-run every live contract check in one shot**:
+
+13. **Re-run every live contract check in one shot**:
    ```bash
    make test-live-contracts
    ```
-   This runs the WDI, IFS, ILOSTAT, and UN Comtrade live contract checks back to back.
-12. **Re-run every live contract check against local fixtures**:
+   This runs the WDI backbone, WDI labor overlap, IFS, ILOSTAT, and UN Comtrade live contract checks back to back.
+
+14. **Re-run every live contract check against local fixtures**:
    ```bash
    make test-live-contracts-offline
    ```
    This swaps each live fetcher for a committed fixture-backed mock helper under `tests/fixtures/live_sources/`, so the warehouse contract can be verified without depending on external APIs.
-13. **Assert the first proper labor mart plus the starter mixed Phase 2 labor/trade mart after the offline suite**:
+
+15. **Assert the first Phase 2 inflation, labor, trade, QA, and combined latest marts after the offline suite**:
    ```bash
    make test-phase2-starter-marts-offline
    ```
-   This verifies that `mart.mart_country_labor_series_annual` cleanly exposes the seeded ILOSTAT unemployment, employment, and labour-force-participation indicators, and that the mixed Phase 2 latest view still combines those labor indicators with the UN Comtrade exports/imports indicators correctly, including the derived trade-balance fields.
+   This verifies that `mart.mart_country_labor_series_annual`, `mart.mart_country_inflation_series_annual`, `mart.mart_country_trade_external_panel_annual`, `mart.vw_domain_qa_summary_phase2`, and `mart.mart_country_macro_plus_external_latest` expose the narrow live-source proofs correctly, including non-empty verbose, deduped, and summarized labor source-conflict lineage plus derived trade-balance fields.
 
 ## Schema Architecture
 
@@ -117,7 +132,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 - `ddl/05_core_dimensions.sql`: `core.dim_country`, `core.dim_indicator`, `core.dim_source`, `core.dim_dataset`, and `core.dim_time`
 - `ddl/06_core_facts.sql`: `core.fact_country_indicator_version` and `core.fact_country_indicator_published`
 - `ddl/07_audit_tables.sql`: `audit.pipeline_run`, `audit.data_quality_event`, `audit.revision_event`, `audit.publication_version`, and `audit.dataset_freshness`
-- `ddl/08_marts_and_views.sql`: first Phase 1 marts and diagnostic views on the published/audit spine, including `mart.dataset_pipeline_health` for dataset-level operating health, `mart.dataset_pipeline_alerts` for alert-only monitoring, the first proper labor conflict/revision diagnostic views, and the first Phase 2 starter marts for labor/trade indicators.
+- `ddl/08_marts_and_views.sql`: first Phase 1 marts and diagnostic views on the published/audit spine, including `mart.dataset_pipeline_health` for dataset-level operating health, `mart.dataset_pipeline_alerts` for alert-only monitoring, the first proper labor/inflation/trade Phase 2 marts, the combined macro-plus-external latest snapshot, and labor/inflation/trade diagnostic views, including deduped latest labor and inflation conflict surfaces plus a compact latest labor conflict summary view.
 - `ddl/09_constraints_indexes.sql`: first Wave 8 hardening unit for constraints, indexes, and publish guards
 - `ddl/10_canonical_contract_followthrough.sql`: additive canonical-contract enforcement for comparability/source-switch lineage, including `mart.vw_macro_source_selection_lineage` for flattened source-selection diagnostics
 - `seeds/01_core_dimension_seeds.sql`: conformed core-dimension sync from `ref`
@@ -148,11 +163,12 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 - `etl/03_publish_phase1.sql`: Phase 1 staging -> core fact publication plus publish-guard enforcement.
 - `scripts/load_phase1_sample.sh`: default runnable sample loader for the Phase 1 raw/staging/core/audit/mart contract.
 - `scripts/load_wdi_live.sh`: first narrow live WDI loader that now defaults to the canonical seeded country basket from `ref.country`, fetches JSON snapshots, records them in `raw.source_snapshot`, and publishes through the existing Phase 1 contract.
+- `scripts/load_wdi_labor_live.sh`: tiny real WDI labor overlap loader for `DEU` `2022`, with snapshot evidence, per-run manifest output, and metadata-driven labor-series lineage used to prove labor source conflicts against ILOSTAT.
 - `scripts/load_ifs_live.sh`: first narrow live IFS loader that now defaults to the canonical seeded country basket from `ref.country`, fetches JSON snapshots plus IMF country metadata, records them in `raw.source_snapshot`, and publishes through the existing Phase 1 contract.
 - `scripts/load_ilostat_live.sh`: first live ILOSTAT loader for annual total unemployment rate, employment-to-population ratio, and labour force participation rate ages 15+, now defaulting to the canonical seeded country basket from `ref.country` across the widened 2019-2023 proof window, recorded as snapshot-backed evidence and published through the same warehouse contract.
 - `scripts/load_un_comtrade_live.sh`: first live UN Comtrade loader for annual total exports/imports against World partner totals, now using targeted reporter-code requests derived from the canonical seeded country basket across the widened 2019-2023 proof window, recorded as snapshot-backed evidence and published through the same warehouse contract.
 - `scripts/check_pipeline_alerts.sh`: exits non-zero when `mart.dataset_pipeline_alerts` contains any active alerts, for CI/cron health checks.
-- `queries/test_phase2_starter_marts.sql`: regression checks for the first proper labor mart (`mart.mart_country_labor_series_annual`) plus the starter mixed Phase 2 labor/trade views built from the seeded ILOSTAT labor trio and UN Comtrade trade slices.
+- `queries/test_phase2_starter_marts.sql`: regression checks for the first proper labor mart, the inflation/trade Phase 2 marts, the combined latest macro-plus-external snapshot, and the verbose, deduped, and summarized labor plus inflation conflict diagnostics.
 - `scripts/fetch_http_to_snapshot.py`: reusable fetch helper for saving HTTP payloads as local evidence files.
 - `scripts/fetch_uncomtrade_snapshot.py`: UN Comtrade-specific fetch helper that handles CSRF + POST query semantics and persists raw response snapshots.
 - `queries/`: SQL scripts for analysis.
@@ -170,7 +186,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 10. Keep future work aligned to the Phase 1 contract instead of reintroducing a parallel warehouse path.
 
 ## Current status vs future goal
-- Current status: the warehouse structure, publication logic, QA surfaces, and analyst views are working locally with sample WDI and IFS files, and the first live WDI, IFS, ILOSTAT, and UN Comtrade loaders now run end to end.
+- Current status: the warehouse structure, publication logic, QA surfaces, and analyst views are working locally with sample WDI and IFS files, and the first live WDI backbone, WDI labor overlap, IFS, ILOSTAT, and UN Comtrade loaders now run end to end.
 - Not done yet: production-grade source coverage across labor, trade, and other domains; the live specialist-source slices now cover the seeded canonical country basket through a widened 2019-2023 proof window for ILOSTAT and UN Comtrade, with ILOSTAT now proving unemployment, employment, and labour-force-participation rates, and the repo exposes those published results through first-pass Phase 2 starter marts, but they are still deliberately narrow proofs rather than broad production coverage.
 - Intended direction: keep onboarding new sources through the metadata registry first, then widen ILOSTAT, UN Comtrade, and later sources on top of the existing `raw -> staging -> core -> audit -> mart` path without creating a second ingestion architecture.
 - Non-goal: querying the live web every time an analyst asks for a number. The intended model is still fetch first, store locally, then query the local warehouse.

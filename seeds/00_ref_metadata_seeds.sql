@@ -82,6 +82,9 @@ FROM (
         ('WDI', 'NY.GDP.PCAP.CD', 'GDP per capita (current US$)', 'current US$', 'A', 'Phase 1 required macro backbone series', TRUE),
         ('WDI', 'FP.CPI.TOTL.ZG', 'Inflation, consumer prices (annual %)', 'annual %', 'A', 'Phase 1 minimal annual inflation comparison series', TRUE),
         ('WDI', 'SP.POP.TOTL', 'Population, total', 'persons', 'A', 'Phase 1 required macro backbone series', TRUE),
+        ('WDI', 'SL.EMP.TOTL.SP.ZS', 'Employment to population ratio, ages 15+, total (%)', 'percent', 'A', 'Narrow real overlap slice used to prove labor source-conflict diagnostics against ILOSTAT.', TRUE),
+        ('WDI', 'SL.TLF.CACT.ZS', 'Labor force participation rate, ages 15+, total (%)', 'percent', 'A', 'Narrow real overlap slice used to prove labor source-conflict diagnostics against ILOSTAT.', TRUE),
+        ('WDI', 'SL.UEM.TOTL.ZS', 'Unemployment, total (% of total labor force)', 'percent', 'A', 'Narrow real overlap slice used to prove labor source-conflict diagnostics against ILOSTAT.', TRUE),
         ('IFS', 'NGDP_USD', 'Nominal GDP (current US$)', 'current US$', 'A', 'Minimal IMF IFS sample series for second source-priority arbitration proof', TRUE),
         ('IFS', 'PCPI_PC_PP_PT', 'Inflation, average consumer prices (annual %)', 'annual %', 'A', 'Initial IFS inflation authority series for the live specialist-source slice', TRUE),
         ('ILOSTAT', 'EMP_RATE_15PLUS_TOTAL', 'Employment-to-population ratio, total ages 15+ (%)', 'percent', 'A', 'Expanded ILOSTAT live labor slice: annual total employment-to-population ratio for ages 15+.', TRUE),
@@ -103,6 +106,9 @@ INSERT INTO ref.source_series_alias (
 SELECT rs.source_series_key, a.alias_type, a.alias_code, a.alias_label, a.is_active
 FROM (
     VALUES
+        ('WDI', 'SL.EMP.TOTL.SP.ZS', 'wb_indicator_code', 'SL.EMP.TOTL.SP.ZS', 'World Bank API code for employment to population ratio, ages 15+, total.', TRUE),
+        ('WDI', 'SL.TLF.CACT.ZS', 'wb_indicator_code', 'SL.TLF.CACT.ZS', 'World Bank API code for labor force participation rate, ages 15+, total.', TRUE),
+        ('WDI', 'SL.UEM.TOTL.ZS', 'wb_indicator_code', 'SL.UEM.TOTL.ZS', 'World Bank API code for total unemployment rate.', TRUE),
         ('IFS', 'NGDP_USD', 'imf_datamapper_indicator', 'NGDPD', 'IMF DataMapper API code for Nominal GDP (current US$)', TRUE),
         ('IFS', 'PCPI_PC_PP_PT', 'imf_datamapper_indicator', 'PCPIPCH', 'IMF DataMapper API code for Inflation, average consumer prices (annual %)', TRUE),
         ('ILOSTAT', 'EMP_RATE_15PLUS_TOTAL', 'ilo_indicator_request', 'EMP_DWAP_SEX_AGE_RT_A|SEX_T|AGE_YTHADULT_YGE15', 'ILOSTAT API request signature for annual total employment-to-population ratio ages 15+.', TRUE),
@@ -162,6 +168,9 @@ FROM (
         ('INFLATION_CPI_PCT', 'WDI', 'FP.CPI.TOTL.ZG', 'WDI inflation fallback mapping', TRUE),
         ('INFLATION_CPI_PCT', 'IFS', 'PCPI_PC_PP_PT', 'IFS inflation authority mapping for the live specialist-source slice', TRUE),
         ('POP_TOTAL', 'WDI', 'SP.POP.TOTL', 'WDI population backbone mapping', TRUE),
+        ('EMPLOYMENT_RATE_PCT', 'WDI', 'SL.EMP.TOTL.SP.ZS', 'Narrow real WDI overlap mapping for labor conflict diagnostics.', TRUE),
+        ('LABOR_FORCE_PARTICIPATION_RATE_PCT', 'WDI', 'SL.TLF.CACT.ZS', 'Narrow real WDI overlap mapping for labor conflict diagnostics.', TRUE),
+        ('UNEMPLOYMENT_RATE_PCT', 'WDI', 'SL.UEM.TOTL.ZS', 'Narrow real WDI overlap mapping for labor conflict diagnostics.', TRUE),
         ('EMPLOYMENT_RATE_PCT', 'ILOSTAT', 'EMP_RATE_15PLUS_TOTAL', 'ILOSTAT employment-to-population authority mapping for the expanded live labor slice', TRUE),
         ('LABOR_FORCE_PARTICIPATION_RATE_PCT', 'ILOSTAT', 'LFPR_15PLUS_TOTAL', 'ILOSTAT labour-force-participation authority mapping for the expanded live labor slice', TRUE),
         ('UNEMPLOYMENT_RATE_PCT', 'ILOSTAT', 'UNE_RATE_15PLUS_TOTAL', 'ILOSTAT unemployment authority mapping for the first live labor slice', TRUE),
@@ -208,9 +217,9 @@ WHERE isp.indicator_key = i.indicator_key
       OR (i.indicator_code = 'GDP_PC_CURR_USD' AND d.dataset_code = 'WDI')
       OR (i.indicator_code = 'INFLATION_CPI_PCT' AND d.dataset_code IN ('WDI', 'IFS'))
       OR (i.indicator_code = 'POP_TOTAL' AND d.dataset_code = 'WDI')
-      OR (i.indicator_code = 'EMPLOYMENT_RATE_PCT' AND d.dataset_code = 'ILOSTAT')
-      OR (i.indicator_code = 'LABOR_FORCE_PARTICIPATION_RATE_PCT' AND d.dataset_code = 'ILOSTAT')
-      OR (i.indicator_code = 'UNEMPLOYMENT_RATE_PCT' AND d.dataset_code = 'ILOSTAT')
+      OR (i.indicator_code = 'EMPLOYMENT_RATE_PCT' AND d.dataset_code IN ('ILOSTAT', 'WDI'))
+      OR (i.indicator_code = 'LABOR_FORCE_PARTICIPATION_RATE_PCT' AND d.dataset_code IN ('ILOSTAT', 'WDI'))
+      OR (i.indicator_code = 'UNEMPLOYMENT_RATE_PCT' AND d.dataset_code IN ('ILOSTAT', 'WDI'))
       OR (i.indicator_code = 'TRADE_EXPORTS_CURR_USD' AND d.dataset_code = 'UN_COMTRADE_ANNUAL')
       OR (i.indicator_code = 'TRADE_IMPORTS_CURR_USD' AND d.dataset_code = 'UN_COMTRADE_ANNUAL')
   );
@@ -238,8 +247,11 @@ FROM (
         ('INFLATION_CPI_PCT', 'WDI', 2, 'WDI remains the broad-coverage fallback inflation series when the minimal IMF IFS sample does not cover a country-year.'),
         ('POP_TOTAL', 'WDI', 1, 'Phase 1 production backbone uses WDI for broad annual country coverage.'),
         ('EMPLOYMENT_RATE_PCT', 'ILOSTAT', 1, 'ILOSTAT is the preferred authority for the first employment-to-population labor slice.'),
+        ('EMPLOYMENT_RATE_PCT', 'WDI', 2, 'WDI is a narrow real overlap slice used to prove labor source-conflict diagnostics when ILOSTAT also covers the same country-year.'),
         ('LABOR_FORCE_PARTICIPATION_RATE_PCT', 'ILOSTAT', 1, 'ILOSTAT is the preferred authority for the first labour-force-participation labor slice.'),
+        ('LABOR_FORCE_PARTICIPATION_RATE_PCT', 'WDI', 2, 'WDI is a narrow real overlap slice used to prove labor source-conflict diagnostics when ILOSTAT also covers the same country-year.'),
         ('UNEMPLOYMENT_RATE_PCT', 'ILOSTAT', 1, 'ILOSTAT is the preferred authority for the first unemployment-rate labor slice.'),
+        ('UNEMPLOYMENT_RATE_PCT', 'WDI', 2, 'WDI is a narrow real overlap slice used to prove labor source-conflict diagnostics when ILOSTAT also covers the same country-year.'),
         ('TRADE_EXPORTS_CURR_USD', 'UN_COMTRADE_ANNUAL', 1, 'UN Comtrade is the preferred authority for the first total-exports trade slice.'),
         ('TRADE_IMPORTS_CURR_USD', 'UN_COMTRADE_ANNUAL', 1, 'UN Comtrade is the preferred authority for the first total-imports trade slice.')
 ) AS p(indicator_code, dataset_code, priority_rank, selection_rationale)
