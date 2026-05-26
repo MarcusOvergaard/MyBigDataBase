@@ -94,8 +94,8 @@ test-live-wdi-labor-contract:
 	@chmod +x scripts/test_live_wdi_labor_contract.sh
 	@./scripts/test_live_wdi_labor_contract.sh
 
-# Re-run the live IFS specialist-source slice and assert lineage/arbitration fields stay intact
-# Override FETCH_HELPER for offline fixture-backed runs if needed.
+# Re-run the live IFS macro arbitration slice and assert lineage/arbitration fields stay intact
+# Covers both inflation and GDP overlap proofs. Override FETCH_HELPER for offline fixture-backed runs if needed.
 test-live-ifs-contract:
 	@chmod +x scripts/test_live_ifs_inflation_contract.sh
 	@./scripts/test_live_ifs_inflation_contract.sh

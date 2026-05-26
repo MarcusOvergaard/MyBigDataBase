@@ -92,11 +92,11 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
    ```
    This reruns the narrow WDI labor overlap slice and fails if the latest live WDI labor batch loses its labor-series lineage arrays, stops normalizing the three overlap indicators, or leaves pipeline alerts behind.
 
-12. **Re-run the live IFS inflation contract check**:
+12. **Re-run the live IFS macro arbitration contract check**:
    ```bash
    make test-live-ifs-contract
    ```
-   This reruns the IFS specialist-source slice and fails if the latest live IFS batch loses its metadata-driven indicator lineage, fails to publish IFS-backed inflation rows, or leaves pipeline alerts behind.
+   This reruns the IFS specialist-source slice and fails if the latest live IFS batch loses its metadata-driven indicator lineage, stops declaring the GDP/CPI source-series codes in `request_params_json`, fails to publish IFS-backed inflation or GDP rows, or leaves pipeline alerts behind.
 
 13. **Re-run every live contract check in one shot**:
    ```bash
@@ -164,7 +164,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 - `scripts/load_phase1_sample.sh`: default runnable sample loader for the Phase 1 raw/staging/core/audit/mart contract.
 - `scripts/load_wdi_live.sh`: first narrow live WDI loader that now defaults to the canonical seeded country basket from `ref.country`, fetches JSON snapshots, records them in `raw.source_snapshot`, and publishes through the existing Phase 1 contract.
 - `scripts/load_wdi_labor_live.sh`: tiny real WDI labor overlap loader for `DEU` `2022`, with snapshot evidence, per-run manifest output, and metadata-driven labor-series lineage used to prove labor source conflicts against ILOSTAT.
-- `scripts/load_ifs_live.sh`: first narrow live IFS loader that now defaults to the canonical seeded country basket from `ref.country`, fetches JSON snapshots plus IMF country metadata, records them in `raw.source_snapshot`, and publishes through the existing Phase 1 contract.
+- `scripts/load_ifs_live.sh`: first narrow live IFS loader that now defaults to the canonical seeded country basket from `ref.country`, fetches JSON snapshots plus IMF country metadata, records them in `raw.source_snapshot`, and publishes through the existing Phase 1 contract, including the tiny real GDP-plus-inflation overlap proof used for source-priority diagnostics.
 - `scripts/load_ilostat_live.sh`: first live ILOSTAT loader for annual total unemployment rate, employment-to-population ratio, and labour force participation rate ages 15+, now defaulting to the canonical seeded country basket from `ref.country` across the widened 2019-2023 proof window, recorded as snapshot-backed evidence and published through the same warehouse contract.
 - `scripts/load_un_comtrade_live.sh`: first live UN Comtrade loader for annual total exports/imports against World partner totals, now using targeted reporter-code requests derived from the canonical seeded country basket across the widened 2019-2023 proof window, recorded as snapshot-backed evidence and published through the same warehouse contract.
 - `scripts/check_pipeline_alerts.sh`: exits non-zero when `mart.dataset_pipeline_alerts` contains any active alerts, for CI/cron health checks.

@@ -45,6 +45,15 @@ BEGIN
 
     IF NOT EXISTS (
         SELECT 1
+        FROM raw.source_batch sb
+        WHERE sb.source_batch_key = latest_batch_key
+          AND sb.request_params_json -> 'source_series_codes' @> '["NGDP_USD"]'::jsonb
+    ) THEN
+        RAISE EXCEPTION 'Live IFS contract test failed: latest live IFS batch does not declare the GDP source series code';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
         FROM core.fact_country_indicator_published fp
         JOIN core.dim_indicator di ON di.indicator_key = fp.indicator_key
         JOIN core.dim_dataset dd ON dd.source_dataset_key = fp.source_dataset_key
@@ -55,10 +64,23 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'Live IFS contract test failed: latest live IFS batch did not publish any IFS-backed inflation rows';
     END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM core.fact_country_indicator_published fp
+        JOIN core.dim_indicator di ON di.indicator_key = fp.indicator_key
+        JOIN core.dim_dataset dd ON dd.source_dataset_key = fp.source_dataset_key
+        JOIN core.fact_country_indicator_version fv ON fv.observation_version_key = fp.observation_version_key
+        WHERE fv.source_batch_key = latest_batch_key
+          AND di.indicator_code = 'GDP_CURR_USD'
+          AND dd.dataset_code = 'IFS'
+    ) THEN
+        RAISE EXCEPTION 'Live IFS contract test failed: latest live IFS batch did not publish any IFS-backed GDP rows';
+    END IF;
 END;
 $$;
 SQL
 
 DATASET_CODE=IFS ./scripts/check_pipeline_alerts.sh
 
-echo "Live IFS inflation contract test passed"
+echo "Live IFS macro arbitration contract test passed"

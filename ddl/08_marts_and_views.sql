@@ -6,6 +6,11 @@ DROP VIEW IF EXISTS mart.mart_country_phase2_latest CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_macro_plus_external_latest CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_trade_external_panel_annual CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_inflation_series_annual CASCADE;
+DROP VIEW IF EXISTS mart.vw_phase2_source_conflict_summary CASCADE;
+DROP VIEW IF EXISTS mart.vw_gdp_source_conflict_summary_latest CASCADE;
+DROP VIEW IF EXISTS mart.vw_gdp_source_conflicts_latest CASCADE;
+DROP VIEW IF EXISTS mart.vw_gdp_source_conflicts CASCADE;
+DROP VIEW IF EXISTS mart.vw_inflation_source_conflict_summary_latest CASCADE;
 
 CREATE OR REPLACE VIEW mart.mart_country_macro_series_annual AS
 SELECT
@@ -1339,6 +1344,394 @@ SELECT
 FROM ranked_conflicts
 WHERE dataset_recency_rank = 1;
 
+CREATE OR REPLACE VIEW mart.vw_inflation_source_conflict_summary_latest AS
+SELECT
+    country_key,
+    iso_alpha_3,
+    country_name,
+    region_name,
+    income_group,
+    indicator_key,
+    indicator_code,
+    indicator_name,
+    time_key,
+    observation_year,
+    COUNT(*) AS competing_dataset_count,
+    MAX(selected_dataset_code) AS selected_dataset_code,
+    MAX(selected_dataset_name) AS selected_dataset_name,
+    MAX(selected_source_code) AS selected_source_code,
+    MAX(selected_series_code) AS selected_series_code,
+    MAX(selected_observation_value) AS selected_observation_value,
+    MAX(selected_selection_method) AS selected_selection_method,
+    MAX(selected_priority_rank) AS selected_priority_rank,
+    BOOL_OR(selected_is_override) AS selected_is_override,
+    MAX(selected_selection_rationale) AS selected_selection_rationale,
+    MAX(publication_version_code) AS publication_version_code,
+    MAX(selected_published_at) AS selected_published_at,
+    MIN(observation_value) AS min_conflicting_value,
+    MAX(observation_value) AS max_conflicting_value,
+    MAX(observation_value) - MIN(observation_value) AS conflicting_value_spread,
+    STRING_AGG(
+        dataset_code || '=' || observation_value::TEXT || CASE WHEN is_selected_published_row THEN ' [selected]' ELSE '' END,
+        ' | '
+        ORDER BY dataset_code
+    ) AS candidate_dataset_values
+FROM mart.vw_inflation_source_conflicts_latest
+GROUP BY
+    country_key,
+    iso_alpha_3,
+    country_name,
+    region_name,
+    income_group,
+    indicator_key,
+    indicator_code,
+    indicator_name,
+    time_key,
+    observation_year;
+
+CREATE OR REPLACE VIEW mart.vw_gdp_source_conflicts AS
+WITH gdp_versions AS (
+    SELECT
+        fv.observation_version_key,
+        fv.country_key,
+        dc.iso_alpha_3,
+        dc.country_name,
+        dc.region_name,
+        dc.income_group,
+        fv.indicator_key,
+        di.indicator_code,
+        di.indicator_name,
+        fv.time_key,
+        dt.calendar_year AS observation_year,
+        fv.observation_value,
+        fv.source_system_key,
+        ds.source_code,
+        ds.source_name,
+        fv.source_dataset_key,
+        dd.dataset_code,
+        dd.dataset_name,
+        fv.source_series_key,
+        rs.series_code,
+        rs.series_name,
+        fv.source_batch_key,
+        fv.source_released_at,
+        fv.selection_method,
+        fv.quality_status,
+        fv.status_code,
+        fv.is_latest_source_version,
+        fv.first_seen_at,
+        fv.superseded_at
+    FROM core.fact_country_indicator_version fv
+    JOIN core.dim_country dc ON dc.country_key = fv.country_key
+    JOIN core.dim_indicator di ON di.indicator_key = fv.indicator_key
+    JOIN core.dim_time dt ON dt.time_key = fv.time_key
+    JOIN core.dim_source ds ON ds.source_system_key = fv.source_system_key
+    JOIN core.dim_dataset dd ON dd.source_dataset_key = fv.source_dataset_key
+    LEFT JOIN ref.source_series rs ON rs.source_series_key = fv.source_series_key
+    WHERE di.indicator_code = 'GDP_CURR_USD'
+),
+conflicted_keys AS (
+    SELECT
+        country_key,
+        indicator_key,
+        time_key
+    FROM gdp_versions
+    GROUP BY country_key, indicator_key, time_key
+    HAVING COUNT(DISTINCT source_dataset_key) > 1
+),
+selected_rows AS (
+    SELECT
+        ranked_selected_rows.country_key,
+        ranked_selected_rows.indicator_key,
+        ranked_selected_rows.time_key,
+        ranked_selected_rows.selected_observation_version_key,
+        ranked_selected_rows.selected_dataset_code,
+        ranked_selected_rows.selected_dataset_name,
+        ranked_selected_rows.selected_source_code,
+        ranked_selected_rows.selected_series_code,
+        ranked_selected_rows.selected_observation_value,
+        ranked_selected_rows.selected_selection_method,
+        ranked_selected_rows.selected_priority_rank,
+        ranked_selected_rows.selected_is_override,
+        ranked_selected_rows.selected_selection_rationale,
+        ranked_selected_rows.publication_version_code,
+        ranked_selected_rows.selected_published_at
+    FROM (
+        SELECT
+            m.country_key,
+            m.indicator_key,
+            m.time_key,
+            m.observation_version_key AS selected_observation_version_key,
+            m.dataset_code AS selected_dataset_code,
+            m.dataset_name AS selected_dataset_name,
+            m.source_code AS selected_source_code,
+            m.series_code AS selected_series_code,
+            m.observation_value AS selected_observation_value,
+            m.selection_method AS selected_selection_method,
+            m.priority_rank AS selected_priority_rank,
+            m.is_override AS selected_is_override,
+            m.selection_rationale AS selected_selection_rationale,
+            m.publication_version_code,
+            m.published_at AS selected_published_at,
+            ROW_NUMBER() OVER (
+                PARTITION BY m.country_key, m.indicator_key, m.time_key
+                ORDER BY m.published_at DESC, m.publication_version_code DESC, m.observation_version_key DESC
+            ) AS publication_recency_rank
+        FROM mart.vw_macro_source_selection_lineage m
+        WHERE m.indicator_code = 'GDP_CURR_USD'
+    ) ranked_selected_rows
+    WHERE ranked_selected_rows.publication_recency_rank = 1
+)
+SELECT
+    gv.country_key,
+    gv.iso_alpha_3,
+    gv.country_name,
+    gv.region_name,
+    gv.income_group,
+    gv.indicator_key,
+    gv.indicator_code,
+    gv.indicator_name,
+    gv.time_key,
+    gv.observation_year,
+    gv.observation_version_key,
+    gv.observation_value,
+    gv.source_system_key,
+    gv.source_code,
+    gv.source_name,
+    gv.source_dataset_key,
+    gv.dataset_code,
+    gv.dataset_name,
+    gv.source_series_key,
+    gv.series_code,
+    gv.series_name,
+    gv.source_batch_key,
+    gv.source_released_at,
+    gv.selection_method,
+    gv.quality_status,
+    gv.status_code,
+    gv.is_latest_source_version,
+    gv.first_seen_at,
+    gv.superseded_at,
+    sr.selected_observation_version_key,
+    sr.selected_dataset_code,
+    sr.selected_dataset_name,
+    sr.selected_source_code,
+    sr.selected_series_code,
+    sr.selected_observation_value,
+    sr.selected_selection_method,
+    sr.selected_priority_rank,
+    sr.selected_is_override,
+    sr.selected_selection_rationale,
+    sr.publication_version_code,
+    sr.selected_published_at,
+    (gv.observation_version_key = sr.selected_observation_version_key) AS is_selected_published_row
+FROM gdp_versions gv
+JOIN conflicted_keys ck
+  ON ck.country_key = gv.country_key
+ AND ck.indicator_key = gv.indicator_key
+ AND ck.time_key = gv.time_key
+JOIN selected_rows sr
+  ON sr.country_key = gv.country_key
+ AND sr.indicator_key = gv.indicator_key
+ AND sr.time_key = gv.time_key;
+
+CREATE OR REPLACE VIEW mart.vw_gdp_source_conflicts_latest AS
+WITH ranked_conflicts AS (
+    SELECT
+        gc.*,
+        ROW_NUMBER() OVER (
+            PARTITION BY gc.country_key, gc.indicator_key, gc.time_key, gc.source_dataset_key
+            ORDER BY COALESCE(gc.source_released_at, gc.first_seen_at) DESC,
+                     gc.source_batch_key DESC,
+                     gc.observation_version_key DESC
+        ) AS dataset_recency_rank
+    FROM mart.vw_gdp_source_conflicts gc
+)
+SELECT
+    country_key,
+    iso_alpha_3,
+    country_name,
+    region_name,
+    income_group,
+    indicator_key,
+    indicator_code,
+    indicator_name,
+    time_key,
+    observation_year,
+    observation_version_key,
+    observation_value,
+    source_system_key,
+    source_code,
+    source_name,
+    source_dataset_key,
+    dataset_code,
+    dataset_name,
+    source_series_key,
+    series_code,
+    series_name,
+    source_batch_key,
+    source_released_at,
+    selection_method,
+    quality_status,
+    status_code,
+    is_latest_source_version,
+    first_seen_at,
+    superseded_at,
+    selected_observation_version_key,
+    selected_dataset_code,
+    selected_dataset_name,
+    selected_source_code,
+    selected_series_code,
+    selected_observation_value,
+    selected_selection_method,
+    selected_priority_rank,
+    selected_is_override,
+    selected_selection_rationale,
+    publication_version_code,
+    selected_published_at,
+    is_selected_published_row
+FROM ranked_conflicts
+WHERE dataset_recency_rank = 1;
+
+CREATE OR REPLACE VIEW mart.vw_gdp_source_conflict_summary_latest AS
+SELECT
+    country_key,
+    iso_alpha_3,
+    country_name,
+    region_name,
+    income_group,
+    indicator_key,
+    indicator_code,
+    indicator_name,
+    time_key,
+    observation_year,
+    COUNT(*) AS competing_dataset_count,
+    MAX(selected_dataset_code) AS selected_dataset_code,
+    MAX(selected_dataset_name) AS selected_dataset_name,
+    MAX(selected_source_code) AS selected_source_code,
+    MAX(selected_series_code) AS selected_series_code,
+    MAX(selected_observation_value) AS selected_observation_value,
+    MAX(selected_selection_method) AS selected_selection_method,
+    MAX(selected_priority_rank) AS selected_priority_rank,
+    BOOL_OR(selected_is_override) AS selected_is_override,
+    MAX(selected_selection_rationale) AS selected_selection_rationale,
+    MAX(publication_version_code) AS publication_version_code,
+    MAX(selected_published_at) AS selected_published_at,
+    MIN(observation_value) AS min_conflicting_value,
+    MAX(observation_value) AS max_conflicting_value,
+    MAX(observation_value) - MIN(observation_value) AS conflicting_value_spread,
+    STRING_AGG(
+        dataset_code || '=' || observation_value::TEXT || CASE WHEN is_selected_published_row THEN ' [selected]' ELSE '' END,
+        ' | '
+        ORDER BY dataset_code
+    ) AS candidate_dataset_values
+FROM mart.vw_gdp_source_conflicts_latest
+GROUP BY
+    country_key,
+    iso_alpha_3,
+    country_name,
+    region_name,
+    income_group,
+    indicator_key,
+    indicator_code,
+    indicator_name,
+    time_key,
+    observation_year;
+
+CREATE OR REPLACE VIEW mart.vw_phase2_source_conflict_summary AS
+SELECT
+    'labor'::text AS conflict_family,
+    'Phase 2 labor overlap proof'::text AS conflict_scope,
+    l.country_key,
+    l.iso_alpha_3,
+    l.country_name,
+    l.region_name,
+    l.income_group,
+    l.indicator_key,
+    l.indicator_code,
+    l.indicator_name,
+    l.time_key,
+    l.observation_year,
+    l.competing_dataset_count,
+    l.selected_dataset_code,
+    l.selected_dataset_name,
+    l.selected_source_code,
+    l.selected_series_code,
+    l.selected_observation_value,
+    l.selected_selection_method,
+    l.selected_priority_rank,
+    l.selected_is_override,
+    l.selected_selection_rationale,
+    l.publication_version_code,
+    l.selected_published_at,
+    l.min_conflicting_value,
+    l.max_conflicting_value,
+    l.conflicting_value_spread,
+    l.candidate_dataset_values
+FROM mart.vw_labor_source_conflict_summary_latest l
+UNION ALL
+SELECT
+    'inflation'::text AS conflict_family,
+    'IFS-vs-WDI inflation overlap proof'::text AS conflict_scope,
+    i.country_key,
+    i.iso_alpha_3,
+    i.country_name,
+    i.region_name,
+    i.income_group,
+    i.indicator_key,
+    i.indicator_code,
+    i.indicator_name,
+    i.time_key,
+    i.observation_year,
+    i.competing_dataset_count,
+    i.selected_dataset_code,
+    i.selected_dataset_name,
+    i.selected_source_code,
+    i.selected_series_code,
+    i.selected_observation_value,
+    i.selected_selection_method,
+    i.selected_priority_rank,
+    i.selected_is_override,
+    i.selected_selection_rationale,
+    i.publication_version_code,
+    i.selected_published_at,
+    i.min_conflicting_value,
+    i.max_conflicting_value,
+    i.conflicting_value_spread,
+    i.candidate_dataset_values
+FROM mart.vw_inflation_source_conflict_summary_latest i
+UNION ALL
+SELECT
+    'gdp'::text AS conflict_family,
+    'IFS-vs-WDI GDP overlap proof'::text AS conflict_scope,
+    g.country_key,
+    g.iso_alpha_3,
+    g.country_name,
+    g.region_name,
+    g.income_group,
+    g.indicator_key,
+    g.indicator_code,
+    g.indicator_name,
+    g.time_key,
+    g.observation_year,
+    g.competing_dataset_count,
+    g.selected_dataset_code,
+    g.selected_dataset_name,
+    g.selected_source_code,
+    g.selected_series_code,
+    g.selected_observation_value,
+    g.selected_selection_method,
+    g.selected_priority_rank,
+    g.selected_is_override,
+    g.selected_selection_rationale,
+    g.publication_version_code,
+    g.selected_published_at,
+    g.min_conflicting_value,
+    g.max_conflicting_value,
+    g.conflicting_value_spread,
+    g.candidate_dataset_values
+FROM mart.vw_gdp_source_conflict_summary_latest g;
+
 CREATE OR REPLACE VIEW mart.vw_trade_external_revision_history AS
 SELECT
     mrh.revision_event_key,
@@ -1398,6 +1791,25 @@ phase2_indicator_stats AS (
         'TRADE_IMPORTS_CURR_USD'
     )
     GROUP BY fp.source_dataset_key
+),
+phase2_conflict_participation AS (
+    SELECT
+        conflict_rows.source_dataset_key,
+        COUNT(DISTINCT (conflict_rows.country_key, conflict_rows.indicator_key, conflict_rows.time_key)) AS current_conflict_key_count,
+        COUNT(*) AS current_conflict_dataset_row_count,
+        COUNT(*) FILTER (WHERE conflict_rows.is_selected_published_row) AS current_selected_conflict_key_count,
+        MAX(conflict_rows.observation_year) AS latest_conflict_observation_year
+    FROM (
+        SELECT source_dataset_key, country_key, indicator_key, time_key, observation_year, is_selected_published_row
+        FROM mart.vw_labor_source_conflicts_latest
+        UNION ALL
+        SELECT source_dataset_key, country_key, indicator_key, time_key, observation_year, is_selected_published_row
+        FROM mart.vw_inflation_source_conflicts_latest
+        UNION ALL
+        SELECT source_dataset_key, country_key, indicator_key, time_key, observation_year, is_selected_published_row
+        FROM mart.vw_gdp_source_conflicts_latest
+    ) conflict_rows
+    GROUP BY conflict_rows.source_dataset_key
 )
 SELECT
     pd.source_dataset_key,
@@ -1428,7 +1840,12 @@ SELECT
     COALESCE(ps.current_phase2_indicator_count, 0) AS current_phase2_indicator_count,
     ps.min_phase2_observation_year,
     ps.max_phase2_observation_year,
+    COALESCE(cp.current_conflict_key_count, 0) AS current_conflict_key_count,
+    COALESCE(cp.current_conflict_dataset_row_count, 0) AS current_conflict_dataset_row_count,
+    COALESCE(cp.current_selected_conflict_key_count, 0) AS current_selected_conflict_key_count,
+    cp.latest_conflict_observation_year,
     h.anomaly_flags
 FROM phase2_datasets pd
 JOIN mart.dataset_pipeline_health h ON h.source_dataset_key = pd.source_dataset_key
-LEFT JOIN phase2_indicator_stats ps ON ps.source_dataset_key = pd.source_dataset_key;
+LEFT JOIN phase2_indicator_stats ps ON ps.source_dataset_key = pd.source_dataset_key
+LEFT JOIN phase2_conflict_participation cp ON cp.source_dataset_key = pd.source_dataset_key;
