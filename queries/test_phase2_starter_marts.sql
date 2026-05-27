@@ -76,6 +76,15 @@ DECLARE
     phase2_dataset_trend_invalid_ratio_count INT;
     phase2_dataset_trend_invalid_latest_flag_count INT;
     phase2_dataset_trend_invalid_status_count INT;
+    phase2_dependency_row_count INT;
+    phase2_dependency_expected_row_count INT;
+    phase2_dependency_duplicate_row_count INT;
+    phase2_dependency_missing_expected_dataset_count INT;
+    phase2_dependency_missing_selected_dataset_count INT;
+    phase2_dependency_issue_alignment_count INT;
+    phase2_dependency_invalid_status_count INT;
+    phase2_dependency_invalid_fallback_count INT;
+    phase2_dependency_china_lfpr_mismatch_count INT;
     macro_plus_external_row_count INT;
     employment_populated_count INT;
     labor_force_participation_populated_count INT;
@@ -943,6 +952,122 @@ BEGIN
     END IF;
 
     SELECT COUNT(*)
+    INTO phase2_dependency_row_count
+    FROM mart.mart_country_phase2_dependency_explainer;
+
+    SELECT COUNT(*)
+    INTO phase2_dependency_expected_row_count
+    FROM mart.mart_country_phase2_readiness_summary rs
+    CROSS JOIN (
+        SELECT indicator_code
+        FROM core.dim_indicator
+        WHERE indicator_code IN (
+            'EMPLOYMENT_RATE_PCT',
+            'LABOR_FORCE_PARTICIPATION_RATE_PCT',
+            'UNEMPLOYMENT_RATE_PCT',
+            'INFLATION_CPI_PCT',
+            'TRADE_EXPORTS_CURR_USD',
+            'TRADE_IMPORTS_CURR_USD',
+            'CURRENT_ACCOUNT_BALANCE_CURR_USD',
+            'CURRENT_ACCOUNT_BALANCE_PCT_GDP'
+        )
+    ) indicators;
+
+    IF phase2_dependency_row_count <> phase2_dependency_expected_row_count THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_dependency_explainer row count % did not match expected country-indicator grid %', phase2_dependency_row_count, phase2_dependency_expected_row_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dependency_duplicate_row_count
+    FROM (
+        SELECT country_key, indicator_key, COUNT(*) AS row_count
+        FROM mart.mart_country_phase2_dependency_explainer
+        GROUP BY country_key, indicator_key
+        HAVING COUNT(*) <> 1
+    ) duplicate_rows;
+
+    IF phase2_dependency_duplicate_row_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_dependency_explainer has % duplicated country-indicator key(s)', phase2_dependency_duplicate_row_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dependency_missing_expected_dataset_count
+    FROM mart.mart_country_phase2_dependency_explainer
+    WHERE expected_dataset_code IS NULL
+       OR expected_source_code IS NULL
+       OR expected_priority_rank IS NULL;
+
+    IF phase2_dependency_missing_expected_dataset_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_dependency_explainer has % row(s) missing expected-dataset lineage', phase2_dependency_missing_expected_dataset_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dependency_missing_selected_dataset_count
+    FROM mart.mart_country_phase2_dependency_explainer
+    WHERE is_indicator_present
+      AND (selected_dataset_code IS NULL OR selected_source_code IS NULL OR selected_observation_year IS NULL);
+
+    IF phase2_dependency_missing_selected_dataset_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_dependency_explainer has % present-indicator row(s) missing selected-dataset lineage', phase2_dependency_missing_selected_dataset_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dependency_issue_alignment_count
+    FROM mart.mart_country_phase2_dependency_explainer de
+    JOIN mart.mart_country_phase2_readiness_summary rs
+      ON rs.country_key = de.country_key
+    WHERE (de.selected_observation_year IS NULL) <>
+          (de.indicator_code = ANY(COALESCE(rs.missing_indicator_codes, ARRAY[]::text[])));
+
+    IF phase2_dependency_issue_alignment_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_dependency_explainer has % row(s) out of sync with readiness missing_indicator_codes', phase2_dependency_issue_alignment_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dependency_invalid_status_count
+    FROM mart.mart_country_phase2_dependency_explainer
+    WHERE dependency_status NOT IN (
+        'covered_by_expected_dataset',
+        'covered_by_fallback_dataset',
+        'missing_despite_complete_expected_dataset',
+        'missing_country_from_expected_dataset',
+        'missing_from_patchy_expected_dataset',
+        'missing_with_country_fallback_history',
+        'missing_without_country_fallback_history',
+        'missing_without_configured_fallback'
+    );
+
+    IF phase2_dependency_invalid_status_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_dependency_explainer has % row(s) with invalid dependency_status values', phase2_dependency_invalid_status_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dependency_invalid_fallback_count
+    FROM mart.mart_country_phase2_dependency_explainer
+    WHERE configured_fallback_dataset_count <> COALESCE(cardinality(configured_fallback_dataset_codes), 0)
+       OR available_fallback_dataset_count_for_country <> COALESCE(cardinality(available_fallback_dataset_codes_for_country), 0);
+
+    IF phase2_dependency_invalid_fallback_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_dependency_explainer has % row(s) with inconsistent fallback counts', phase2_dependency_invalid_fallback_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dependency_china_lfpr_mismatch_count
+    FROM mart.mart_country_phase2_dependency_explainer
+    WHERE iso_alpha_3 = 'CHN'
+      AND indicator_code = 'LABOR_FORCE_PARTICIPATION_RATE_PCT'
+      AND NOT (
+            expected_dataset_code = 'ILOSTAT'
+        AND 'WDI' = ANY(configured_fallback_dataset_codes)
+        AND selected_dataset_code IS NULL
+        AND dependency_status = 'missing_country_from_expected_dataset'
+      );
+
+    IF phase2_dependency_china_lfpr_mismatch_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_dependency_explainer lost the seeded CHN labor-force-participation dependency proof';
+    END IF;
+
+    SELECT COUNT(*)
     INTO macro_plus_external_row_count
     FROM mart.mart_country_macro_plus_external_latest;
 
@@ -1121,6 +1246,22 @@ LIMIT 12;
 
 SELECT
     iso_alpha_3,
+    indicator_code,
+    expected_dataset_code,
+    selected_dataset_code,
+    dependency_status,
+    expected_dataset_coverage_status,
+    configured_fallback_dataset_codes,
+    available_fallback_dataset_codes_for_country,
+    selected_observation_year,
+    diagnosis_year
+FROM mart.mart_country_phase2_dependency_explainer
+WHERE NOT is_indicator_present
+ORDER BY iso_alpha_3, indicator_code
+LIMIT 12;
+
+SELECT
+    iso_alpha_3,
     country_name,
     phase2_indicator_coverage_count,
     phase2_indicator_gap_count,
@@ -1160,6 +1301,24 @@ SELECT
 FROM mart.mart_phase2_dataset_coverage_trend
 ORDER BY dataset_code, indicator_code, observation_year DESC
 LIMIT 20;
+
+SELECT
+    iso_alpha_3,
+    indicator_code,
+    expected_dataset_code,
+    expected_priority_rank,
+    expected_is_override,
+    selected_dataset_code,
+    selected_observation_year,
+    selected_selection_method,
+    expected_dataset_coverage_status,
+    is_country_missing_from_expected_dataset_latest_year,
+    configured_fallback_dataset_codes,
+    available_fallback_dataset_codes_for_country,
+    dependency_status
+FROM mart.mart_country_phase2_dependency_explainer
+ORDER BY iso_alpha_3, indicator_code
+LIMIT 24;
 
 SELECT
     iso_alpha_3,

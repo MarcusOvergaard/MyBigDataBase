@@ -2,6 +2,7 @@
 -- These analyst-facing surfaces build from the new published/audit contract rather than the legacy dw path.
 
 DROP VIEW IF EXISTS mart.country_latest_macro;
+DROP VIEW IF EXISTS mart.mart_country_phase2_dependency_explainer CASCADE;
 DROP VIEW IF EXISTS mart.mart_phase2_dataset_coverage_trend CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_phase2_issues CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_phase2_readiness_summary CASCADE;
@@ -2142,3 +2143,283 @@ SELECT
     e.latest_row_published_at
 FROM enriched e
 JOIN mart.dataset_pipeline_health h ON h.source_dataset_key = e.source_dataset_key;
+
+CREATE OR REPLACE VIEW mart.mart_country_phase2_dependency_explainer AS
+WITH phase2_indicator_catalog AS (
+    SELECT
+        di.indicator_key,
+        di.indicator_code,
+        di.indicator_name
+    FROM core.dim_indicator di
+    WHERE di.indicator_code IN (
+        'EMPLOYMENT_RATE_PCT',
+        'LABOR_FORCE_PARTICIPATION_RATE_PCT',
+        'UNEMPLOYMENT_RATE_PCT',
+        'INFLATION_CPI_PCT',
+        'TRADE_EXPORTS_CURR_USD',
+        'TRADE_IMPORTS_CURR_USD',
+        'CURRENT_ACCOUNT_BALANCE_CURR_USD',
+        'CURRENT_ACCOUNT_BALANCE_PCT_GDP'
+    )
+),
+country_indicator_grid AS (
+    SELECT
+        rs.country_key,
+        rs.iso_alpha_3,
+        rs.country_name,
+        rs.region_name,
+        rs.income_group,
+        rs.phase2_indicator_coverage_count,
+        rs.phase2_indicator_gap_count,
+        rs.phase2_coverage_status,
+        rs.latest_phase2_observation_year,
+        rs.latest_published_at,
+        pic.indicator_key,
+        pic.indicator_code,
+        pic.indicator_name
+    FROM mart.mart_country_phase2_readiness_summary rs
+    CROSS JOIN phase2_indicator_catalog pic
+),
+latest_selected_rows AS (
+    SELECT
+        ps.country_key,
+        ps.indicator_key,
+        ps.source_dataset_key,
+        ps.dataset_code,
+        ps.dataset_name,
+        ps.source_code,
+        ps.source_name,
+        ps.observation_year,
+        ps.observation_value,
+        ps.selection_method,
+        ps.published_at,
+        ROW_NUMBER() OVER (
+            PARTITION BY ps.country_key, ps.indicator_key
+            ORDER BY ps.observation_year DESC, ps.published_at DESC, ps.observation_version_key DESC
+        ) AS recency_rank
+    FROM mart.mart_country_phase2_series_annual ps
+),
+selected_rows AS (
+    SELECT
+        lsr.country_key,
+        lsr.indicator_key,
+        lsr.source_dataset_key,
+        lsr.dataset_code,
+        lsr.dataset_name,
+        lsr.source_code,
+        lsr.source_name,
+        lsr.observation_year,
+        lsr.observation_value,
+        lsr.selection_method,
+        lsr.published_at
+    FROM latest_selected_rows lsr
+    WHERE lsr.recency_rank = 1
+),
+diagnosis_base AS (
+    SELECT
+        cig.country_key,
+        cig.iso_alpha_3,
+        cig.country_name,
+        cig.region_name,
+        cig.income_group,
+        cig.phase2_indicator_coverage_count,
+        cig.phase2_indicator_gap_count,
+        cig.phase2_coverage_status,
+        cig.latest_phase2_observation_year,
+        cig.latest_published_at,
+        cig.indicator_key,
+        cig.indicator_code,
+        cig.indicator_name,
+        sr.source_dataset_key AS selected_source_dataset_key,
+        sr.dataset_code AS selected_dataset_code,
+        sr.dataset_name AS selected_dataset_name,
+        sr.source_code AS selected_source_code,
+        sr.source_name AS selected_source_name,
+        sr.observation_year AS selected_observation_year,
+        sr.observation_value AS selected_observation_value,
+        sr.selection_method AS selected_selection_method,
+        sr.published_at AS selected_published_at,
+        COALESCE(sr.observation_year, cig.latest_phase2_observation_year) AS diagnosis_year
+    FROM country_indicator_grid cig
+    LEFT JOIN selected_rows sr
+      ON sr.country_key = cig.country_key
+     AND sr.indicator_key = cig.indicator_key
+),
+applicable_rules AS (
+    SELECT
+        db.country_key,
+        db.indicator_key,
+        isp.source_dataset_key,
+        dd.dataset_code,
+        dd.dataset_name,
+        ss.source_code,
+        ss.source_name,
+        isp.priority_rank,
+        isp.is_override,
+        isp.selection_rationale,
+        ROW_NUMBER() OVER (
+            PARTITION BY db.country_key, db.indicator_key
+            ORDER BY
+                CASE WHEN isp.country_key = db.country_key THEN 0 ELSE 1 END,
+                CASE
+                    WHEN db.diagnosis_year IS NULL
+                     AND (isp.valid_from_year IS NOT NULL OR isp.valid_to_year IS NOT NULL)
+                        THEN 1
+                    ELSE 0
+                END,
+                isp.is_override DESC,
+                isp.priority_rank ASC,
+                isp.indicator_source_priority_key ASC
+        ) AS applicable_rule_rank
+    FROM diagnosis_base db
+    JOIN ref.indicator_source_priority isp
+      ON isp.indicator_key = db.indicator_key
+    JOIN ref.source_dataset dd ON dd.source_dataset_key = isp.source_dataset_key
+    JOIN ref.source_system ss ON ss.source_system_key = dd.source_system_key
+    WHERE (isp.country_key IS NULL OR isp.country_key = db.country_key)
+      AND (db.diagnosis_year IS NULL OR isp.valid_from_year IS NULL OR db.diagnosis_year >= isp.valid_from_year)
+      AND (db.diagnosis_year IS NULL OR isp.valid_to_year IS NULL OR db.diagnosis_year <= isp.valid_to_year)
+),
+expected_rules AS (
+    SELECT
+        ar.country_key,
+        ar.indicator_key,
+        ar.source_dataset_key AS expected_source_dataset_key,
+        ar.dataset_code AS expected_dataset_code,
+        ar.dataset_name AS expected_dataset_name,
+        ar.source_code AS expected_source_code,
+        ar.source_name AS expected_source_name,
+        ar.priority_rank AS expected_priority_rank,
+        ar.is_override AS expected_is_override,
+        ar.selection_rationale AS expected_selection_rationale
+    FROM applicable_rules ar
+    WHERE ar.applicable_rule_rank = 1
+),
+configured_fallback_datasets AS (
+    SELECT
+        fallback_rows.country_key,
+        fallback_rows.indicator_key,
+        ARRAY_AGG(fallback_rows.dataset_code ORDER BY fallback_rows.priority_rank, fallback_rows.dataset_code) AS configured_fallback_dataset_codes,
+        COUNT(*) AS configured_fallback_dataset_count
+    FROM (
+        SELECT DISTINCT
+            ar.country_key,
+            ar.indicator_key,
+            ar.dataset_code,
+            ar.priority_rank
+        FROM applicable_rules ar
+        JOIN expected_rules er
+          ON er.country_key = ar.country_key
+         AND er.indicator_key = ar.indicator_key
+        WHERE ar.applicable_rule_rank > 1
+          AND ar.source_dataset_key <> er.expected_source_dataset_key
+    ) fallback_rows
+    GROUP BY fallback_rows.country_key, fallback_rows.indicator_key
+),
+country_fallback_history AS (
+    SELECT
+        history_rows.country_key,
+        history_rows.indicator_key,
+        ARRAY_AGG(history_rows.dataset_code ORDER BY history_rows.latest_observation_year DESC, history_rows.dataset_code) AS available_fallback_dataset_codes_for_country,
+        COUNT(*) AS available_fallback_dataset_count_for_country,
+        MAX(history_rows.latest_observation_year) AS latest_fallback_observation_year_for_country
+    FROM (
+        SELECT
+            ps.country_key,
+            ps.indicator_key,
+            ps.dataset_code,
+            MAX(ps.observation_year) AS latest_observation_year
+        FROM mart.mart_country_phase2_series_annual ps
+        GROUP BY ps.country_key, ps.indicator_key, ps.dataset_code
+    ) history_rows
+    JOIN expected_rules er
+      ON er.country_key = history_rows.country_key
+     AND er.indicator_key = history_rows.indicator_key
+    WHERE history_rows.dataset_code <> er.expected_dataset_code
+    GROUP BY history_rows.country_key, history_rows.indicator_key
+)
+SELECT
+    db.country_key,
+    db.iso_alpha_3,
+    db.country_name,
+    db.region_name,
+    db.income_group,
+    db.phase2_indicator_coverage_count,
+    db.phase2_indicator_gap_count,
+    db.phase2_coverage_status,
+    CASE
+        WHEN db.phase2_indicator_gap_count >= 3 THEN 'high'
+        WHEN db.phase2_indicator_gap_count >= 1 THEN 'medium'
+        ELSE 'low'
+    END AS country_issue_severity,
+    db.indicator_key,
+    db.indicator_code,
+    db.indicator_name,
+    db.diagnosis_year,
+    er.expected_source_dataset_key,
+    er.expected_dataset_code,
+    er.expected_dataset_name,
+    er.expected_source_code,
+    er.expected_source_name,
+    er.expected_priority_rank,
+    er.expected_is_override,
+    er.expected_selection_rationale,
+    db.selected_source_dataset_key,
+    db.selected_dataset_code,
+    db.selected_dataset_name,
+    db.selected_source_code,
+    db.selected_source_name,
+    db.selected_observation_year,
+    db.selected_observation_value,
+    db.selected_selection_method,
+    db.selected_published_at,
+    (db.selected_observation_year IS NOT NULL) AS is_indicator_present,
+    (db.selected_source_dataset_key = er.expected_source_dataset_key) AS is_covered_by_expected_dataset,
+    dt.latest_observation_year_for_indicator AS expected_dataset_latest_observation_year,
+    dt.covered_country_count AS expected_dataset_covered_country_count,
+    dt.expected_country_count AS expected_dataset_expected_country_count,
+    dt.missing_country_count AS expected_dataset_missing_country_count,
+    dt.coverage_ratio AS expected_dataset_coverage_ratio,
+    dt.coverage_status AS expected_dataset_coverage_status,
+    dt.missing_country_iso_alpha_3_codes AS expected_dataset_missing_country_iso_alpha_3_codes,
+    (db.iso_alpha_3 = ANY(COALESCE(dt.missing_country_iso_alpha_3_codes, ARRAY[]::text[]))) AS is_country_missing_from_expected_dataset_latest_year,
+    COALESCE(cfd.configured_fallback_dataset_codes, ARRAY[]::text[]) AS configured_fallback_dataset_codes,
+    COALESCE(cfd.configured_fallback_dataset_count, 0) AS configured_fallback_dataset_count,
+    COALESCE(cfh.available_fallback_dataset_codes_for_country, ARRAY[]::text[]) AS available_fallback_dataset_codes_for_country,
+    COALESCE(cfh.available_fallback_dataset_count_for_country, 0) AS available_fallback_dataset_count_for_country,
+    cfh.latest_fallback_observation_year_for_country,
+    CASE
+        WHEN db.selected_observation_year IS NOT NULL
+         AND db.selected_source_dataset_key = er.expected_source_dataset_key
+            THEN 'covered_by_expected_dataset'
+        WHEN db.selected_observation_year IS NOT NULL
+         AND db.selected_source_dataset_key <> er.expected_source_dataset_key
+            THEN 'covered_by_fallback_dataset'
+        WHEN dt.coverage_status = 'complete'
+            THEN 'missing_despite_complete_expected_dataset'
+        WHEN dt.coverage_status = 'country_specific_gap'
+         AND db.iso_alpha_3 = ANY(COALESCE(dt.missing_country_iso_alpha_3_codes, ARRAY[]::text[]))
+            THEN 'missing_country_from_expected_dataset'
+        WHEN dt.coverage_status IN ('broad_but_patchy', 'source_wide_gap')
+            THEN 'missing_from_patchy_expected_dataset'
+        WHEN COALESCE(cfh.available_fallback_dataset_count_for_country, 0) > 0
+            THEN 'missing_with_country_fallback_history'
+        WHEN COALESCE(cfd.configured_fallback_dataset_count, 0) > 0
+            THEN 'missing_without_country_fallback_history'
+        ELSE 'missing_without_configured_fallback'
+    END AS dependency_status,
+    db.latest_published_at
+FROM diagnosis_base db
+JOIN expected_rules er
+  ON er.country_key = db.country_key
+ AND er.indicator_key = db.indicator_key
+LEFT JOIN mart.mart_phase2_dataset_coverage_trend dt
+  ON dt.source_dataset_key = er.expected_source_dataset_key
+ AND dt.indicator_code = db.indicator_code
+ AND dt.is_latest_observation_year = TRUE
+LEFT JOIN configured_fallback_datasets cfd
+  ON cfd.country_key = db.country_key
+ AND cfd.indicator_key = db.indicator_key
+LEFT JOIN country_fallback_history cfh
+  ON cfh.country_key = db.country_key
+ AND cfh.indicator_key = db.indicator_key;
