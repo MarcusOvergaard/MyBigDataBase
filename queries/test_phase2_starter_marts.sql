@@ -720,6 +720,66 @@ END;
 $$;
 
 SELECT
+    conflict_family,
+    conflict_scope,
+    iso_alpha_3,
+    country_name,
+    indicator_code,
+    observation_year,
+    selected_dataset_code,
+    selected_selection_method,
+    candidate_dataset_values
+FROM mart.vw_phase2_source_conflict_summary
+ORDER BY conflict_family, observation_year DESC, iso_alpha_3
+LIMIT 12;
+
+SELECT
+    dataset_code,
+    source_code,
+    freshness_status,
+    latest_publish_status,
+    latest_publish_total_dq_event_count,
+    latest_publish_blocking_qa_event_count,
+    current_phase2_published_row_count,
+    current_phase2_indicator_count,
+    current_conflict_key_count,
+    current_conflict_dataset_row_count,
+    current_selected_conflict_key_count,
+    latest_conflict_observation_year,
+    anomaly_flags
+FROM mart.vw_domain_qa_summary_phase2
+ORDER BY dataset_code;
+
+SELECT
+    iso_alpha_3,
+    country_name,
+    employment_rate_pct_year,
+    employment_rate_pct,
+    unemployment_rate_pct_year,
+    unemployment_rate_pct,
+    inflation_cpi_pct_year,
+    inflation_cpi_pct,
+    trade_exports_curr_usd_year,
+    trade_exports_curr_usd,
+    trade_imports_curr_usd_year,
+    trade_imports_curr_usd,
+    current_account_balance_curr_usd_year,
+    current_account_balance_curr_usd,
+    current_account_balance_pct_gdp_year,
+    current_account_balance_pct_gdp,
+    trade_balance_curr_usd,
+    trade_balance_direction,
+    latest_published_at
+FROM mart.mart_country_phase2_latest
+ORDER BY iso_alpha_3
+LIMIT 10;
+
+\if :{?PHASE2_VERBOSE}
+\else
+\set PHASE2_VERBOSE 0
+\endif
+\if :PHASE2_VERBOSE
+SELECT
     iso_alpha_3,
     country_name,
     indicator_code,
@@ -879,20 +939,6 @@ ORDER BY observation_year DESC, iso_alpha_3, indicator_code
 LIMIT 10;
 
 SELECT
-    conflict_family,
-    conflict_scope,
-    iso_alpha_3,
-    country_name,
-    indicator_code,
-    observation_year,
-    selected_dataset_code,
-    selected_selection_method,
-    candidate_dataset_values
-FROM mart.vw_phase2_source_conflict_summary
-ORDER BY conflict_family, observation_year DESC, iso_alpha_3
-LIMIT 15;
-
-SELECT
     iso_alpha_3,
     country_name,
     indicator_code,
@@ -923,23 +969,6 @@ ORDER BY changed_at DESC, iso_alpha_3, indicator_code, observation_year
 LIMIT 10;
 
 SELECT
-    dataset_code,
-    source_code,
-    freshness_status,
-    latest_publish_status,
-    latest_publish_total_dq_event_count,
-    latest_publish_blocking_qa_event_count,
-    current_phase2_published_row_count,
-    current_phase2_indicator_count,
-    current_conflict_key_count,
-    current_conflict_dataset_row_count,
-    current_selected_conflict_key_count,
-    latest_conflict_observation_year,
-    anomaly_flags
-FROM mart.vw_domain_qa_summary_phase2
-ORDER BY dataset_code;
-
-SELECT
     iso_alpha_3,
     country_name,
     gdp_curr_usd_year,
@@ -959,3 +988,4 @@ SELECT
 FROM mart.mart_country_macro_plus_external_latest
 ORDER BY iso_alpha_3
 LIMIT 10;
+\endif
