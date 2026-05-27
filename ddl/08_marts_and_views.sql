@@ -7,10 +7,13 @@ DROP VIEW IF EXISTS mart.mart_country_macro_plus_external_latest CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_trade_external_panel_annual CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_inflation_series_annual CASCADE;
 DROP VIEW IF EXISTS mart.vw_phase2_source_conflict_summary CASCADE;
+DROP VIEW IF EXISTS mart.vw_gdp_source_conflict_summary CASCADE;
 DROP VIEW IF EXISTS mart.vw_gdp_source_conflict_summary_latest CASCADE;
 DROP VIEW IF EXISTS mart.vw_gdp_source_conflicts_latest CASCADE;
 DROP VIEW IF EXISTS mart.vw_gdp_source_conflicts CASCADE;
+DROP VIEW IF EXISTS mart.vw_inflation_source_conflict_summary CASCADE;
 DROP VIEW IF EXISTS mart.vw_inflation_source_conflict_summary_latest CASCADE;
+DROP VIEW IF EXISTS mart.vw_labor_source_conflict_summary CASCADE;
 
 CREATE OR REPLACE VIEW mart.mart_country_macro_series_annual AS
 SELECT
@@ -395,6 +398,29 @@ SELECT
     mpe.country_name,
     mpe.region_name,
     mpe.income_group,
+    (
+        CASE WHEN mpe.employment_rate_pct_year IS NOT NULL THEN 1 ELSE 0 END
+      + CASE WHEN mpe.labor_force_participation_rate_pct_year IS NOT NULL THEN 1 ELSE 0 END
+      + CASE WHEN mpe.unemployment_rate_pct_year IS NOT NULL THEN 1 ELSE 0 END
+      + CASE WHEN mpe.inflation_cpi_pct_year IS NOT NULL THEN 1 ELSE 0 END
+      + CASE WHEN mpe.trade_exports_curr_usd_year IS NOT NULL THEN 1 ELSE 0 END
+      + CASE WHEN mpe.trade_imports_curr_usd_year IS NOT NULL THEN 1 ELSE 0 END
+      + CASE WHEN mpe.current_account_balance_curr_usd_year IS NOT NULL THEN 1 ELSE 0 END
+      + CASE WHEN mpe.current_account_balance_pct_gdp_year IS NOT NULL THEN 1 ELSE 0 END
+    ) AS phase2_indicator_coverage_count,
+    NULLIF(
+        GREATEST(
+            COALESCE(mpe.employment_rate_pct_year, 0),
+            COALESCE(mpe.labor_force_participation_rate_pct_year, 0),
+            COALESCE(mpe.unemployment_rate_pct_year, 0),
+            COALESCE(mpe.inflation_cpi_pct_year, 0),
+            COALESCE(mpe.trade_exports_curr_usd_year, 0),
+            COALESCE(mpe.trade_imports_curr_usd_year, 0),
+            COALESCE(mpe.current_account_balance_curr_usd_year, 0),
+            COALESCE(mpe.current_account_balance_pct_gdp_year, 0)
+        ),
+        0
+    ) AS latest_phase2_observation_year,
     mpe.employment_rate_pct_year,
     mpe.employment_rate_pct,
     mpe.labor_force_participation_rate_pct_year,
@@ -1120,6 +1146,10 @@ GROUP BY
     time_key,
     observation_year;
 
+CREATE OR REPLACE VIEW mart.vw_labor_source_conflict_summary AS
+SELECT *
+FROM mart.vw_labor_source_conflict_summary_latest;
+
 CREATE OR REPLACE VIEW mart.vw_labor_revision_history AS
 SELECT
     mrh.revision_event_key,
@@ -1399,6 +1429,10 @@ GROUP BY
     time_key,
     observation_year;
 
+CREATE OR REPLACE VIEW mart.vw_inflation_source_conflict_summary AS
+SELECT *
+FROM mart.vw_inflation_source_conflict_summary_latest;
+
 CREATE OR REPLACE VIEW mart.vw_gdp_source_conflicts AS
 WITH gdp_versions AS (
     SELECT
@@ -1648,6 +1682,10 @@ GROUP BY
     time_key,
     observation_year;
 
+CREATE OR REPLACE VIEW mart.vw_gdp_source_conflict_summary AS
+SELECT *
+FROM mart.vw_gdp_source_conflict_summary_latest;
+
 CREATE OR REPLACE VIEW mart.vw_phase2_source_conflict_summary AS
 SELECT
     'labor'::text AS conflict_family,
@@ -1678,7 +1716,7 @@ SELECT
     l.max_conflicting_value,
     l.conflicting_value_spread,
     l.candidate_dataset_values
-FROM mart.vw_labor_source_conflict_summary_latest l
+FROM mart.vw_labor_source_conflict_summary l
 UNION ALL
 SELECT
     'inflation'::text AS conflict_family,
@@ -1709,7 +1747,7 @@ SELECT
     i.max_conflicting_value,
     i.conflicting_value_spread,
     i.candidate_dataset_values
-FROM mart.vw_inflation_source_conflict_summary_latest i
+FROM mart.vw_inflation_source_conflict_summary i
 UNION ALL
 SELECT
     'gdp'::text AS conflict_family,
@@ -1740,7 +1778,7 @@ SELECT
     g.max_conflicting_value,
     g.conflicting_value_spread,
     g.candidate_dataset_values
-FROM mart.vw_gdp_source_conflict_summary_latest g;
+FROM mart.vw_gdp_source_conflict_summary g;
 
 CREATE OR REPLACE VIEW mart.vw_trade_external_revision_history AS
 SELECT

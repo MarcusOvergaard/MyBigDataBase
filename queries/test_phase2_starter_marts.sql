@@ -13,6 +13,7 @@ DECLARE
     labor_conflict_latest_duplicate_dataset_count INT;
     labor_conflict_latest_missing_selected_count INT;
     labor_conflict_latest_invalid_selected_key_count INT;
+    labor_conflict_summary_row_count INT;
     labor_revision_non_labor_indicator_count INT;
     labor_revision_missing_change_type_count INT;
     inflation_indicator_count INT;
@@ -36,6 +37,7 @@ DECLARE
     gdp_conflict_latest_missing_selected_count INT;
     gdp_conflict_latest_invalid_selected_key_count INT;
     gdp_conflict_summary_row_count INT;
+    summary_alias_mismatch_count INT;
     phase2_conflict_summary_row_count INT;
     phase2_conflict_summary_family_count INT;
     phase2_qa_missing_conflict_counts INT;
@@ -61,6 +63,8 @@ DECLARE
     trade_populated_count INT;
     external_balance_populated_count INT;
     macro_populated_count INT;
+    latest_phase2_coverage_populated_count INT;
+    latest_phase2_recency_populated_count INT;
     mismatched_balance_count INT;
     mismatched_direction_count INT;
 BEGIN
@@ -201,6 +205,34 @@ BEGIN
     END IF;
 
     SELECT COUNT(*)
+    INTO labor_conflict_summary_row_count
+    FROM mart.vw_labor_source_conflict_summary;
+
+    IF labor_conflict_summary_row_count = 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: vw_labor_source_conflict_summary returned no rows despite seeded labor overlap';
+    END IF;
+
+    SELECT COUNT(*)
+    INTO summary_alias_mismatch_count
+    FROM (
+        (
+            SELECT * FROM mart.vw_labor_source_conflict_summary
+            EXCEPT ALL
+            SELECT * FROM mart.vw_labor_source_conflict_summary_latest
+        )
+        UNION ALL
+        (
+            SELECT * FROM mart.vw_labor_source_conflict_summary_latest
+            EXCEPT ALL
+            SELECT * FROM mart.vw_labor_source_conflict_summary
+        )
+    ) summary_alias_diff;
+
+    IF summary_alias_mismatch_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: vw_labor_source_conflict_summary drifted from vw_labor_source_conflict_summary_latest (% mismatched row(s))', summary_alias_mismatch_count;
+    END IF;
+
+    SELECT COUNT(*)
     INTO labor_revision_non_labor_indicator_count
     FROM mart.vw_labor_revision_history
     WHERE indicator_code NOT IN (
@@ -337,6 +369,34 @@ BEGIN
     END IF;
 
     SELECT COUNT(*)
+    INTO inflation_conflict_summary_row_count
+    FROM mart.vw_inflation_source_conflict_summary;
+
+    IF inflation_conflict_summary_row_count = 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: vw_inflation_source_conflict_summary returned no rows despite seeded IFS/WDI overlap';
+    END IF;
+
+    SELECT COUNT(*)
+    INTO summary_alias_mismatch_count
+    FROM (
+        (
+            SELECT * FROM mart.vw_inflation_source_conflict_summary
+            EXCEPT ALL
+            SELECT * FROM mart.vw_inflation_source_conflict_summary_latest
+        )
+        UNION ALL
+        (
+            SELECT * FROM mart.vw_inflation_source_conflict_summary_latest
+            EXCEPT ALL
+            SELECT * FROM mart.vw_inflation_source_conflict_summary
+        )
+    ) summary_alias_diff;
+
+    IF summary_alias_mismatch_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: vw_inflation_source_conflict_summary drifted from vw_inflation_source_conflict_summary_latest (% mismatched row(s))', summary_alias_mismatch_count;
+    END IF;
+
+    SELECT COUNT(*)
     INTO gdp_conflict_non_gdp_indicator_count
     FROM mart.vw_gdp_source_conflicts
     WHERE indicator_code <> 'GDP_CURR_USD';
@@ -422,6 +482,34 @@ BEGIN
 
     IF gdp_conflict_summary_row_count = 0 THEN
         RAISE EXCEPTION 'Phase 2 mart test failed: vw_gdp_source_conflict_summary_latest returned no rows despite seeded IFS/WDI overlap';
+    END IF;
+
+    SELECT COUNT(*)
+    INTO gdp_conflict_summary_row_count
+    FROM mart.vw_gdp_source_conflict_summary;
+
+    IF gdp_conflict_summary_row_count = 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: vw_gdp_source_conflict_summary returned no rows despite seeded IFS/WDI overlap';
+    END IF;
+
+    SELECT COUNT(*)
+    INTO summary_alias_mismatch_count
+    FROM (
+        (
+            SELECT * FROM mart.vw_gdp_source_conflict_summary
+            EXCEPT ALL
+            SELECT * FROM mart.vw_gdp_source_conflict_summary_latest
+        )
+        UNION ALL
+        (
+            SELECT * FROM mart.vw_gdp_source_conflict_summary_latest
+            EXCEPT ALL
+            SELECT * FROM mart.vw_gdp_source_conflict_summary
+        )
+    ) summary_alias_diff;
+
+    IF summary_alias_mismatch_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: vw_gdp_source_conflict_summary drifted from vw_gdp_source_conflict_summary_latest (% mismatched row(s))', summary_alias_mismatch_count;
     END IF;
 
     SELECT COUNT(*)
@@ -590,6 +678,24 @@ BEGIN
     END IF;
 
     SELECT COUNT(*)
+    INTO latest_phase2_coverage_populated_count
+    FROM mart.mart_country_phase2_latest
+    WHERE phase2_indicator_coverage_count > 0;
+
+    IF latest_phase2_coverage_populated_count = 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_latest has no rows with positive phase2_indicator_coverage_count';
+    END IF;
+
+    SELECT COUNT(*)
+    INTO latest_phase2_recency_populated_count
+    FROM mart.mart_country_phase2_latest
+    WHERE latest_phase2_observation_year IS NOT NULL;
+
+    IF latest_phase2_recency_populated_count = 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_latest has no rows with populated latest_phase2_observation_year';
+    END IF;
+
+    SELECT COUNT(*)
     INTO macro_plus_external_row_count
     FROM mart.mart_country_macro_plus_external_latest;
 
@@ -753,6 +859,8 @@ ORDER BY dataset_code;
 SELECT
     iso_alpha_3,
     country_name,
+    phase2_indicator_coverage_count,
+    latest_phase2_observation_year,
     employment_rate_pct_year,
     employment_rate_pct,
     unemployment_rate_pct_year,

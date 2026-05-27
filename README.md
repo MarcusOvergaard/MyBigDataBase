@@ -120,7 +120,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
    ```bash
    make test-phase2-starter-marts-offline
    ```
-   This now keeps the success-path output compact: it prints a cross-family Phase 2 conflict summary, the dataset-level QA/freshness summary, and the analyst-facing `mart.mart_country_phase2_latest` snapshot with WEO-backed current-account fields and derived trade-balance fields.
+   This now keeps the success-path output compact: it prints a cross-family Phase 2 conflict summary, the dataset-level QA/freshness summary, and the analyst-facing `mart.mart_country_phase2_latest` snapshot with coverage and latest-observation-year hints, WEO-backed current-account fields, and derived trade-balance fields.
 
    If you need the old row-dump surfaces for debugging source arbitration or revision history, run:
    ```bash
@@ -143,7 +143,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 - `ddl/05_core_dimensions.sql`: `core.dim_country`, `core.dim_indicator`, `core.dim_source`, `core.dim_dataset`, and `core.dim_time`
 - `ddl/06_core_facts.sql`: `core.fact_country_indicator_version` and `core.fact_country_indicator_published`
 - `ddl/07_audit_tables.sql`: `audit.pipeline_run`, `audit.data_quality_event`, `audit.revision_event`, `audit.publication_version`, and `audit.dataset_freshness`
-- `ddl/08_marts_and_views.sql`: first Phase 1 marts and diagnostic views on the published/audit spine, including `mart.dataset_pipeline_health` for dataset-level operating health, `mart.dataset_pipeline_alerts` for alert-only monitoring, the first proper labor/inflation/trade/external-balance Phase 2 marts, the combined macro-plus-external latest snapshot, and labor/inflation/trade diagnostic views, including deduped latest labor and inflation conflict surfaces plus a compact latest labor conflict summary view.
+- `ddl/08_marts_and_views.sql`: first Phase 1 marts and diagnostic views on the published/audit spine, including `mart.dataset_pipeline_health` for dataset-level operating health, `mart.dataset_pipeline_alerts` for alert-only monitoring, the first proper labor/inflation/trade/external-balance Phase 2 marts, the combined macro-plus-external latest snapshot, a thinner `mart.mart_country_phase2_latest` operator surface with coverage and latest-observation-year hints, and labor/inflation/trade diagnostic views, including compact labor/inflation/GDP conflict summary entry points for routine inspection.
 - `ddl/09_constraints_indexes.sql`: first Wave 8 hardening unit for constraints, indexes, and publish guards
 - `ddl/10_canonical_contract_followthrough.sql`: additive canonical-contract enforcement for comparability/source-switch lineage, including `mart.vw_macro_source_selection_lineage` for flattened source-selection diagnostics
 - `seeds/01_core_dimension_seeds.sql`: conformed core-dimension sync from `ref`
