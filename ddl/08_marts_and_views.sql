@@ -2,6 +2,7 @@
 -- These analyst-facing surfaces build from the new published/audit contract rather than the legacy dw path.
 
 DROP VIEW IF EXISTS mart.country_latest_macro;
+DROP VIEW IF EXISTS mart.mart_phase2_dataset_coverage_trend CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_phase2_issues CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_phase2_readiness_summary CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_phase2_latest CASCADE;
@@ -1983,3 +1984,161 @@ FROM phase2_datasets pd
 JOIN mart.dataset_pipeline_health h ON h.source_dataset_key = pd.source_dataset_key
 LEFT JOIN phase2_indicator_stats ps ON ps.source_dataset_key = pd.source_dataset_key
 LEFT JOIN phase2_conflict_participation cp ON cp.source_dataset_key = pd.source_dataset_key;
+
+CREATE OR REPLACE VIEW mart.mart_phase2_dataset_coverage_trend AS
+WITH active_countries AS (
+    SELECT
+        dc.country_key,
+        dc.iso_alpha_3
+    FROM core.dim_country dc
+    WHERE dc.is_active = TRUE
+      AND COALESCE(dc.is_aggregate, FALSE) = FALSE
+),
+expected_country_count AS (
+    SELECT COUNT(*) AS expected_country_count
+    FROM active_countries
+),
+phase2_rows AS (
+    SELECT
+        fp.source_dataset_key,
+        dd.dataset_code,
+        dd.dataset_name,
+        ds.source_code,
+        ds.source_name,
+        di.indicator_code,
+        di.indicator_name,
+        fp.observation_year,
+        fp.country_key,
+        fp.published_at
+    FROM core.fact_country_indicator_published fp
+    JOIN core.dim_dataset dd ON dd.source_dataset_key = fp.source_dataset_key
+    JOIN core.dim_source ds ON ds.source_system_key = dd.source_system_key
+    JOIN core.dim_indicator di ON di.indicator_key = fp.indicator_key
+    WHERE dd.dataset_code IN ('IFS', 'WEO', 'ILOSTAT', 'UN_COMTRADE_ANNUAL')
+      AND di.indicator_code IN (
+        'EMPLOYMENT_RATE_PCT',
+        'LABOR_FORCE_PARTICIPATION_RATE_PCT',
+        'UNEMPLOYMENT_RATE_PCT',
+        'INFLATION_CPI_PCT',
+        'TRADE_EXPORTS_CURR_USD',
+        'TRADE_IMPORTS_CURR_USD',
+        'CURRENT_ACCOUNT_BALANCE_CURR_USD',
+        'CURRENT_ACCOUNT_BALANCE_PCT_GDP'
+    )
+),
+coverage_by_year AS (
+    SELECT
+        pr.source_dataset_key,
+        pr.dataset_code,
+        pr.dataset_name,
+        pr.source_code,
+        pr.source_name,
+        pr.indicator_code,
+        pr.indicator_name,
+        pr.observation_year,
+        COUNT(DISTINCT pr.country_key) AS covered_country_count,
+        MAX(pr.published_at) AS latest_row_published_at
+    FROM phase2_rows pr
+    GROUP BY
+        pr.source_dataset_key,
+        pr.dataset_code,
+        pr.dataset_name,
+        pr.source_code,
+        pr.source_name,
+        pr.indicator_code,
+        pr.indicator_name,
+        pr.observation_year
+),
+missing_countries AS (
+    SELECT
+        cby.source_dataset_key,
+        cby.indicator_code,
+        cby.observation_year,
+        ARRAY_AGG(ac.iso_alpha_3 ORDER BY ac.iso_alpha_3) FILTER (WHERE pr.country_key IS NULL) AS missing_country_iso_alpha_3_codes
+    FROM coverage_by_year cby
+    CROSS JOIN active_countries ac
+    LEFT JOIN phase2_rows pr
+      ON pr.source_dataset_key = cby.source_dataset_key
+     AND pr.indicator_code = cby.indicator_code
+     AND pr.observation_year = cby.observation_year
+     AND pr.country_key = ac.country_key
+    GROUP BY
+        cby.source_dataset_key,
+        cby.indicator_code,
+        cby.observation_year
+),
+enriched AS (
+    SELECT
+        cby.source_dataset_key,
+        cby.dataset_code,
+        cby.dataset_name,
+        cby.source_code,
+        cby.source_name,
+        cby.indicator_code,
+        cby.indicator_name,
+        cby.observation_year,
+        cby.latest_row_published_at,
+        ecc.expected_country_count,
+        cby.covered_country_count,
+        ecc.expected_country_count - cby.covered_country_count AS missing_country_count,
+        ROUND((cby.covered_country_count::numeric / NULLIF(ecc.expected_country_count, 0)), 4) AS coverage_ratio,
+        COALESCE(mc.missing_country_iso_alpha_3_codes, ARRAY[]::text[]) AS missing_country_iso_alpha_3_codes,
+        MAX(cby.observation_year) OVER (
+            PARTITION BY cby.source_dataset_key, cby.indicator_code
+        ) AS latest_observation_year_for_indicator,
+        LAG(cby.covered_country_count) OVER (
+            PARTITION BY cby.source_dataset_key, cby.indicator_code
+            ORDER BY cby.observation_year
+        ) AS prior_year_covered_country_count
+    FROM coverage_by_year cby
+    CROSS JOIN expected_country_count ecc
+    LEFT JOIN missing_countries mc
+      ON mc.source_dataset_key = cby.source_dataset_key
+     AND mc.indicator_code = cby.indicator_code
+     AND mc.observation_year = cby.observation_year
+)
+SELECT
+    e.source_dataset_key,
+    e.dataset_code,
+    e.dataset_name,
+    e.source_code,
+    e.source_name,
+    e.indicator_code,
+    e.indicator_name,
+    e.observation_year,
+    e.latest_observation_year_for_indicator,
+    (e.observation_year = e.latest_observation_year_for_indicator) AS is_latest_observation_year,
+    e.latest_observation_year_for_indicator - e.observation_year AS observation_year_lag_from_latest,
+    e.expected_country_count,
+    e.covered_country_count,
+    e.missing_country_count,
+    e.coverage_ratio,
+    e.prior_year_covered_country_count,
+    CASE
+        WHEN e.prior_year_covered_country_count IS NULL THEN NULL
+        ELSE ROUND((e.prior_year_covered_country_count::numeric / NULLIF(e.expected_country_count, 0)), 4)
+    END AS prior_year_coverage_ratio,
+    CASE
+        WHEN e.prior_year_covered_country_count IS NULL THEN NULL
+        ELSE e.covered_country_count - e.prior_year_covered_country_count
+    END AS covered_country_count_change_vs_prior_year,
+    CASE
+        WHEN e.prior_year_covered_country_count IS NULL THEN NULL
+        ELSE ROUND(
+            e.coverage_ratio - (e.prior_year_covered_country_count::numeric / NULLIF(e.expected_country_count, 0)),
+            4
+        )
+    END AS coverage_ratio_change_vs_prior_year,
+    CASE
+        WHEN e.covered_country_count = e.expected_country_count THEN 'complete'
+        WHEN e.covered_country_count >= e.expected_country_count - 1 THEN 'country_specific_gap'
+        WHEN e.coverage_ratio >= 0.8000 THEN 'broad_but_patchy'
+        ELSE 'source_wide_gap'
+    END AS coverage_status,
+    e.missing_country_iso_alpha_3_codes,
+    h.freshness_status,
+    h.is_stale,
+    h.latest_published_at AS dataset_latest_published_at,
+    e.latest_row_published_at
+FROM enriched e
+JOIN mart.dataset_pipeline_health h ON h.source_dataset_key = e.source_dataset_key;

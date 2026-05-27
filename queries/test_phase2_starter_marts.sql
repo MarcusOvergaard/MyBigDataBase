@@ -69,6 +69,13 @@ DECLARE
     phase2_issues_invalid_flag_count INT;
     phase2_issues_invalid_severity_count INT;
     phase2_issues_invalid_severity_logic_count INT;
+    phase2_dataset_trend_row_count INT;
+    phase2_dataset_trend_latest_row_count INT;
+    phase2_dataset_trend_expected_latest_row_count INT;
+    phase2_dataset_trend_invalid_gap_count INT;
+    phase2_dataset_trend_invalid_ratio_count INT;
+    phase2_dataset_trend_invalid_latest_flag_count INT;
+    phase2_dataset_trend_invalid_status_count INT;
     macro_plus_external_row_count INT;
     employment_populated_count INT;
     labor_force_participation_populated_count INT;
@@ -866,6 +873,76 @@ BEGIN
     END IF;
 
     SELECT COUNT(*)
+    INTO phase2_dataset_trend_row_count
+    FROM mart.mart_phase2_dataset_coverage_trend;
+
+    IF phase2_dataset_trend_row_count = 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_coverage_trend returned no rows';
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_trend_latest_row_count
+    FROM mart.mart_phase2_dataset_coverage_trend
+    WHERE is_latest_observation_year;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_trend_expected_latest_row_count
+    FROM (
+        SELECT DISTINCT source_dataset_key, indicator_code
+        FROM mart.mart_phase2_dataset_coverage_trend
+    ) latest_keys;
+
+    IF phase2_dataset_trend_latest_row_count <> phase2_dataset_trend_expected_latest_row_count THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_coverage_trend latest-row count % did not match distinct dataset/indicator count %', phase2_dataset_trend_latest_row_count, phase2_dataset_trend_expected_latest_row_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_trend_invalid_gap_count
+    FROM mart.mart_phase2_dataset_coverage_trend
+    WHERE missing_country_count <> expected_country_count - covered_country_count
+       OR COALESCE(cardinality(missing_country_iso_alpha_3_codes), 0) <> missing_country_count;
+
+    IF phase2_dataset_trend_invalid_gap_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_coverage_trend has % row(s) with inconsistent missing-country arithmetic', phase2_dataset_trend_invalid_gap_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_trend_invalid_ratio_count
+    FROM mart.mart_phase2_dataset_coverage_trend
+    WHERE coverage_ratio < 0
+       OR coverage_ratio > 1
+       OR (prior_year_coverage_ratio IS NOT NULL AND (prior_year_coverage_ratio < 0 OR prior_year_coverage_ratio > 1));
+
+    IF phase2_dataset_trend_invalid_ratio_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_coverage_trend has % row(s) with out-of-range coverage ratios', phase2_dataset_trend_invalid_ratio_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_trend_invalid_latest_flag_count
+    FROM mart.mart_phase2_dataset_coverage_trend
+    WHERE is_latest_observation_year <> (observation_year = latest_observation_year_for_indicator)
+       OR observation_year_lag_from_latest <> latest_observation_year_for_indicator - observation_year;
+
+    IF phase2_dataset_trend_invalid_latest_flag_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_coverage_trend has % row(s) with inconsistent latest-year flags', phase2_dataset_trend_invalid_latest_flag_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_trend_invalid_status_count
+    FROM mart.mart_phase2_dataset_coverage_trend
+    WHERE coverage_status <>
+        CASE
+            WHEN covered_country_count = expected_country_count THEN 'complete'
+            WHEN covered_country_count >= expected_country_count - 1 THEN 'country_specific_gap'
+            WHEN coverage_ratio >= 0.8000 THEN 'broad_but_patchy'
+            ELSE 'source_wide_gap'
+        END;
+
+    IF phase2_dataset_trend_invalid_status_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_coverage_trend has % row(s) with inconsistent coverage_status values', phase2_dataset_trend_invalid_status_count;
+    END IF;
+
+    SELECT COUNT(*)
     INTO macro_plus_external_row_count
     FROM mart.mart_country_macro_plus_external_latest;
 
@@ -1027,6 +1104,22 @@ FROM mart.vw_domain_qa_summary_phase2
 ORDER BY dataset_code;
 
 SELECT
+    dataset_code,
+    indicator_code,
+    observation_year,
+    covered_country_count,
+    expected_country_count,
+    coverage_ratio,
+    coverage_status,
+    missing_country_iso_alpha_3_codes,
+    freshness_status,
+    is_stale
+FROM mart.mart_phase2_dataset_coverage_trend
+WHERE is_latest_observation_year
+ORDER BY coverage_ratio ASC, dataset_code, indicator_code
+LIMIT 12;
+
+SELECT
     iso_alpha_3,
     country_name,
     phase2_indicator_coverage_count,
@@ -1048,6 +1141,26 @@ LIMIT 10;
 \set PHASE2_VERBOSE 0
 \endif
 \if :PHASE2_VERBOSE
+SELECT
+    dataset_code,
+    indicator_code,
+    observation_year,
+    latest_observation_year_for_indicator,
+    is_latest_observation_year,
+    covered_country_count,
+    expected_country_count,
+    missing_country_count,
+    coverage_ratio,
+    prior_year_coverage_ratio,
+    coverage_ratio_change_vs_prior_year,
+    coverage_status,
+    missing_country_iso_alpha_3_codes,
+    freshness_status,
+    is_stale
+FROM mart.mart_phase2_dataset_coverage_trend
+ORDER BY dataset_code, indicator_code, observation_year DESC
+LIMIT 20;
+
 SELECT
     iso_alpha_3,
     country_name,
