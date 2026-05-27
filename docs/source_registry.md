@@ -243,6 +243,7 @@ Use for future financial-system expansion, not for the current core country indi
 - **Machine-ingestion method:** SDMX/API, more dataset-specific handling than WDI
 - **Authority / reliability notes:** very strong macro and price-statistics authority, but users must distinguish observed-statistics datasets from forecast-oriented datasets
 - **Implementation verdict:** should become the authority for inflation and the main arbitration layer for macro indicators once the original project grows beyond its seed stage
+- **Current repository proof:** the first narrow external-balance proof now uses `WEO` for annual current-account balance in U.S. dollars and current-account balance as a share of GDP; this is intentionally a small observed external-balance slice, not a blanket claim that `WEO` should replace `IFS` as the default macro authority
 
 ### 3. OECD
 - **Provider name:** Organisation for Economic Co-operation and Development
@@ -359,13 +360,14 @@ Use for future financial-system expansion, not for the current core country indi
 For the current repository skeleton, the most practical path is:
 1. `WDI` for baseline macro and demographic annual coverage
 2. `IMF IFS` for inflation authority and macro arbitration
-3. `ILOSTAT` for labor authority
-4. `WHO` for health authority
-5. `UNESCO UIS` for education authority
-6. `UN Comtrade` for trade authority
-7. `UN DESA` for deeper demographic arbitration and expansion
-8. `OECD`, `BIS`, `ECB`, `FAOSTAT` as specialist comparison/expansion sources
-9. country-specific official sources only by exception rule
+3. `IMF WEO` selectively for the first narrow external-balance current-account slice
+4. `ILOSTAT` for labor authority
+5. `WHO` for health authority
+6. `UNESCO UIS` for education authority
+7. `UN Comtrade` for trade authority
+8. `UN DESA` for deeper demographic arbitration and expansion
+9. `OECD`, `BIS`, `ECB`, `FAOSTAT` as specialist comparison/expansion sources
+10. country-specific official sources only by exception rule
 
 ### Conflict-resolution rules
 When multiple credible sources exist for the same analyst-facing metric:

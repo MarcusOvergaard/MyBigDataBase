@@ -206,7 +206,9 @@ WITH trade_rows AS (
     FROM mart.mart_country_macro_series_annual ms
     WHERE ms.indicator_code IN (
         'TRADE_EXPORTS_CURR_USD',
-        'TRADE_IMPORTS_CURR_USD'
+        'TRADE_IMPORTS_CURR_USD',
+        'CURRENT_ACCOUNT_BALANCE_CURR_USD',
+        'CURRENT_ACCOUNT_BALANCE_PCT_GDP'
     )
 ),
 trade_pairs AS (
@@ -344,6 +346,10 @@ SELECT
     MAX(CASE WHEN r.indicator_code = 'TRADE_EXPORTS_CURR_USD' THEN r.observation_value END) AS trade_exports_curr_usd,
     MAX(CASE WHEN r.indicator_code = 'TRADE_IMPORTS_CURR_USD' THEN r.observation_year END) AS trade_imports_curr_usd_year,
     MAX(CASE WHEN r.indicator_code = 'TRADE_IMPORTS_CURR_USD' THEN r.observation_value END) AS trade_imports_curr_usd,
+    MAX(CASE WHEN r.indicator_code = 'CURRENT_ACCOUNT_BALANCE_CURR_USD' THEN r.observation_year END) AS current_account_balance_curr_usd_year,
+    MAX(CASE WHEN r.indicator_code = 'CURRENT_ACCOUNT_BALANCE_CURR_USD' THEN r.observation_value END) AS current_account_balance_curr_usd,
+    MAX(CASE WHEN r.indicator_code = 'CURRENT_ACCOUNT_BALANCE_PCT_GDP' THEN r.observation_year END) AS current_account_balance_pct_gdp_year,
+    MAX(CASE WHEN r.indicator_code = 'CURRENT_ACCOUNT_BALANCE_PCT_GDP' THEN r.observation_value END) AS current_account_balance_pct_gdp,
     CASE
         WHEN MAX(CASE WHEN r.indicator_code = 'TRADE_EXPORTS_CURR_USD' THEN r.observation_value END) IS NOT NULL
          AND MAX(CASE WHEN r.indicator_code = 'TRADE_IMPORTS_CURR_USD' THEN r.observation_value END) IS NOT NULL
@@ -401,6 +407,10 @@ SELECT
     mpe.trade_exports_curr_usd,
     mpe.trade_imports_curr_usd_year,
     mpe.trade_imports_curr_usd,
+    mpe.current_account_balance_curr_usd_year,
+    mpe.current_account_balance_curr_usd,
+    mpe.current_account_balance_pct_gdp_year,
+    mpe.current_account_balance_pct_gdp,
     mpe.trade_balance_curr_usd,
     mpe.trade_balance_direction,
     mpe.latest_published_at
@@ -1758,7 +1768,9 @@ SELECT
 FROM mart.vw_macro_revision_history mrh
 WHERE mrh.indicator_code IN (
     'TRADE_EXPORTS_CURR_USD',
-    'TRADE_IMPORTS_CURR_USD'
+    'TRADE_IMPORTS_CURR_USD',
+    'CURRENT_ACCOUNT_BALANCE_CURR_USD',
+    'CURRENT_ACCOUNT_BALANCE_PCT_GDP'
 );
 
 CREATE OR REPLACE VIEW mart.vw_domain_qa_summary_phase2 AS
@@ -1771,7 +1783,7 @@ WITH phase2_datasets AS (
         ss.source_name
     FROM ref.source_dataset sd
     JOIN ref.source_system ss ON ss.source_system_key = sd.source_system_key
-    WHERE sd.dataset_code IN ('IFS', 'ILOSTAT', 'UN_COMTRADE_ANNUAL')
+    WHERE sd.dataset_code IN ('IFS', 'WEO', 'ILOSTAT', 'UN_COMTRADE_ANNUAL')
 ),
 phase2_indicator_stats AS (
     SELECT
@@ -1788,7 +1800,9 @@ phase2_indicator_stats AS (
         'UNEMPLOYMENT_RATE_PCT',
         'INFLATION_CPI_PCT',
         'TRADE_EXPORTS_CURR_USD',
-        'TRADE_IMPORTS_CURR_USD'
+        'TRADE_IMPORTS_CURR_USD',
+        'CURRENT_ACCOUNT_BALANCE_CURR_USD',
+        'CURRENT_ACCOUNT_BALANCE_PCT_GDP'
     )
     GROUP BY fp.source_dataset_key
 ),

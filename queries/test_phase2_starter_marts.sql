@@ -41,6 +41,7 @@ DECLARE
     phase2_qa_missing_conflict_counts INT;
     phase2_qa_ifs_conflict_count INT;
     phase2_qa_ilostat_conflict_count INT;
+    phase2_qa_weo_conflict_count INT;
     phase2_qa_trade_conflict_count INT;
     trade_external_indicator_count INT;
     trade_external_non_trade_indicator_count INT;
@@ -58,6 +59,7 @@ DECLARE
     unemployment_populated_count INT;
     inflation_populated_count INT;
     trade_populated_count INT;
+    external_balance_populated_count INT;
     macro_populated_count INT;
     mismatched_balance_count INT;
     mismatched_direction_count INT;
@@ -71,11 +73,13 @@ BEGIN
         'UNEMPLOYMENT_RATE_PCT',
         'INFLATION_CPI_PCT',
         'TRADE_EXPORTS_CURR_USD',
-        'TRADE_IMPORTS_CURR_USD'
+        'TRADE_IMPORTS_CURR_USD',
+        'CURRENT_ACCOUNT_BALANCE_CURR_USD',
+        'CURRENT_ACCOUNT_BALANCE_PCT_GDP'
     );
 
-    IF phase2_indicator_count <> 6 THEN
-        RAISE EXCEPTION 'Phase 2 mart test failed: expected 6 distinct seeded indicators in mart_country_phase2_series_annual, found %', phase2_indicator_count;
+    IF phase2_indicator_count <> 8 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: expected 8 distinct seeded indicators in mart_country_phase2_series_annual, found %', phase2_indicator_count;
     END IF;
 
     SELECT COUNT(DISTINCT indicator_code)
@@ -441,11 +445,13 @@ BEGIN
     FROM mart.mart_country_trade_external_panel_annual
     WHERE indicator_code IN (
         'TRADE_EXPORTS_CURR_USD',
-        'TRADE_IMPORTS_CURR_USD'
+        'TRADE_IMPORTS_CURR_USD',
+        'CURRENT_ACCOUNT_BALANCE_CURR_USD',
+        'CURRENT_ACCOUNT_BALANCE_PCT_GDP'
     );
 
-    IF trade_external_indicator_count <> 2 THEN
-        RAISE EXCEPTION 'Phase 2 mart test failed: expected 2 trade indicators in mart_country_trade_external_panel_annual, found %', trade_external_indicator_count;
+    IF trade_external_indicator_count <> 4 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: expected 4 trade/external indicators in mart_country_trade_external_panel_annual, found %', trade_external_indicator_count;
     END IF;
 
     SELECT COUNT(*)
@@ -453,7 +459,9 @@ BEGIN
     FROM mart.mart_country_trade_external_panel_annual
     WHERE indicator_code NOT IN (
         'TRADE_EXPORTS_CURR_USD',
-        'TRADE_IMPORTS_CURR_USD'
+        'TRADE_IMPORTS_CURR_USD',
+        'CURRENT_ACCOUNT_BALANCE_CURR_USD',
+        'CURRENT_ACCOUNT_BALANCE_PCT_GDP'
     );
 
     IF trade_external_non_trade_indicator_count <> 0 THEN
@@ -473,7 +481,9 @@ BEGIN
     FROM mart.vw_trade_external_revision_history
     WHERE indicator_code NOT IN (
         'TRADE_EXPORTS_CURR_USD',
-        'TRADE_IMPORTS_CURR_USD'
+        'TRADE_IMPORTS_CURR_USD',
+        'CURRENT_ACCOUNT_BALANCE_CURR_USD',
+        'CURRENT_ACCOUNT_BALANCE_PCT_GDP'
     );
 
     IF trade_revision_non_trade_indicator_count <> 0 THEN
@@ -508,7 +518,7 @@ BEGIN
     SELECT COUNT(*)
     INTO phase2_qa_invalid_dataset_count
     FROM mart.vw_domain_qa_summary_phase2
-    WHERE dataset_code NOT IN ('IFS', 'ILOSTAT', 'UN_COMTRADE_ANNUAL');
+    WHERE dataset_code NOT IN ('IFS', 'ILOSTAT', 'UN_COMTRADE_ANNUAL', 'WEO');
 
     IF phase2_qa_invalid_dataset_count <> 0 THEN
         RAISE EXCEPTION 'Phase 2 mart test failed: vw_domain_qa_summary_phase2 contains % row(s) outside the seeded Phase 2 datasets', phase2_qa_invalid_dataset_count;
@@ -551,6 +561,15 @@ BEGIN
 
     IF COALESCE(phase2_qa_ilostat_conflict_count, 0) = 0 THEN
         RAISE EXCEPTION 'Phase 2 mart test failed: vw_domain_qa_summary_phase2 shows no conflict participation for ILOSTAT despite labor overlap';
+    END IF;
+
+    SELECT current_conflict_key_count
+    INTO phase2_qa_weo_conflict_count
+    FROM mart.vw_domain_qa_summary_phase2
+    WHERE dataset_code = 'WEO';
+
+    IF COALESCE(phase2_qa_weo_conflict_count, -1) <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: vw_domain_qa_summary_phase2 expected zero conflict participation for WEO, found %', phase2_qa_weo_conflict_count;
     END IF;
 
     SELECT current_conflict_key_count
@@ -640,6 +659,18 @@ BEGIN
 
     IF trade_populated_count = 0 THEN
         RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_macro_plus_external_latest has no populated trade values';
+    END IF;
+
+    SELECT COUNT(*)
+    INTO external_balance_populated_count
+    FROM mart.mart_country_macro_plus_external_latest
+    WHERE current_account_balance_curr_usd_year IS NOT NULL
+      AND current_account_balance_curr_usd IS NOT NULL
+      AND current_account_balance_pct_gdp_year IS NOT NULL
+      AND current_account_balance_pct_gdp IS NOT NULL;
+
+    IF external_balance_populated_count = 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_macro_plus_external_latest has no populated external-balance values';
     END IF;
 
     SELECT COUNT(*)

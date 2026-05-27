@@ -10,7 +10,7 @@ PSQL = $(PSQL_BASE) -d $(DB_NAME)
 export DB_NAME
 export PSQL_CMD = $(PSQL_BASE)
 
-.PHONY: init create-db ddl seed load-sample load-wdi-live load-wdi-labor-live load-ifs-live load-ilostat-live load-un-comtrade-live clean-ifs-stale-snapshots build-mart test check-alerts test-live-wdi-contract test-live-wdi-labor-contract test-live-ifs-contract test-live-ilostat-contract test-live-un-comtrade-contract test-live-contracts test-live-contracts-offline test-phase2-starter-marts-offline repeat-load-test all
+.PHONY: init create-db ddl seed load-sample load-wdi-live load-wdi-labor-live load-ifs-live load-weo-live load-ilostat-live load-un-comtrade-live clean-ifs-stale-snapshots build-mart test check-alerts test-live-wdi-contract test-live-wdi-labor-contract test-live-ifs-contract test-live-weo-contract test-live-ilostat-contract test-live-un-comtrade-contract test-live-contracts test-live-contracts-offline test-phase2-starter-marts-offline repeat-load-test all
 
 all: init
 
@@ -45,6 +45,11 @@ load-wdi-labor-live:
 load-ifs-live:
 	@chmod +x scripts/load_ifs_live.sh
 	@./scripts/load_ifs_live.sh
+
+# Load a narrow live WEO external-balance slice through the same warehouse contract
+load-weo-live:
+	@chmod +x scripts/load_weo_live.sh
+	@./scripts/load_weo_live.sh
 
 # Load a narrow live ILOSTAT unemployment slice through the same warehouse contract
 load-ilostat-live:
@@ -100,6 +105,12 @@ test-live-ifs-contract:
 	@chmod +x scripts/test_live_ifs_inflation_contract.sh
 	@./scripts/test_live_ifs_inflation_contract.sh
 
+# Re-run the live WEO external-balance slice and assert lineage/publication fields stay intact
+# Override FETCH_HELPER for offline fixture-backed runs if needed.
+test-live-weo-contract:
+	@chmod +x scripts/test_live_weo_external_balance_contract.sh
+	@./scripts/test_live_weo_external_balance_contract.sh
+
 # Re-run the live ILOSTAT labor slice and assert lineage/publication fields stay intact
 # Override FETCH_HELPER for offline fixture-backed runs if needed.
 test-live-ilostat-contract:
@@ -114,13 +125,14 @@ test-live-un-comtrade-contract:
 
 # Re-run all live contract checks in one shot
 # Override FETCH_HELPER for offline fixture-backed runs if needed.
-test-live-contracts: test-live-wdi-contract test-live-wdi-labor-contract test-live-ifs-contract test-live-ilostat-contract test-live-un-comtrade-contract
+test-live-contracts: test-live-wdi-contract test-live-wdi-labor-contract test-live-ifs-contract test-live-weo-contract test-live-ilostat-contract test-live-un-comtrade-contract
 
 # Re-run all live contract checks against local fixtures instead of external APIs
 test-live-contracts-offline:
 	@FETCH_HELPER=scripts/mock_fetch_wdi_snapshot.py ./scripts/test_live_wdi_contract.sh
 	@FETCH_HELPER=scripts/mock_fetch_wdi_labor_snapshot.py ./scripts/test_live_wdi_labor_contract.sh
 	@FETCH_HELPER=scripts/mock_fetch_ifs_snapshot.py ./scripts/test_live_ifs_inflation_contract.sh
+	@FETCH_HELPER=scripts/mock_fetch_weo_snapshot.py ./scripts/test_live_weo_external_balance_contract.sh
 	@FETCH_HELPER=scripts/mock_fetch_ilostat_snapshot.py ./scripts/test_live_ilostat_labor_contract.sh
 	@FETCH_HELPER=scripts/mock_fetch_uncomtrade_snapshot.py ./scripts/test_live_un_comtrade_contract.sh
 
