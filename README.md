@@ -120,7 +120,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
    ```bash
    make test-phase2-starter-marts-offline
    ```
-   This now keeps the success-path output compact: it prints a cross-family Phase 2 conflict summary, the dataset-level QA/freshness summary, and a compact `mart.mart_country_phase2_readiness_summary` scan with coverage gaps, latest-observation-year hints, and trade/external completeness flags.
+   This now keeps the success-path output compact: it prints a cross-family Phase 2 conflict summary, the dataset-level QA/freshness summary, and a compact `mart.mart_country_phase2_issues` scan so weak countries show up immediately, with readiness flags, coverage gaps, and trade/external completeness hints.
 
    If you need the old row-dump surfaces for debugging source arbitration or revision history, run:
    ```bash
@@ -143,7 +143,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 - `ddl/05_core_dimensions.sql`: `core.dim_country`, `core.dim_indicator`, `core.dim_source`, `core.dim_dataset`, and `core.dim_time`
 - `ddl/06_core_facts.sql`: `core.fact_country_indicator_version` and `core.fact_country_indicator_published`
 - `ddl/07_audit_tables.sql`: `audit.pipeline_run`, `audit.data_quality_event`, `audit.revision_event`, `audit.publication_version`, and `audit.dataset_freshness`
-- `ddl/08_marts_and_views.sql`: first Phase 1 marts and diagnostic views on the published/audit spine, including `mart.dataset_pipeline_health` for dataset-level operating health, `mart.dataset_pipeline_alerts` for alert-only monitoring, the first proper labor/inflation/trade/external-balance Phase 2 marts, the combined macro-plus-external latest snapshot, a thinner `mart.mart_country_phase2_latest` operator surface plus `mart.mart_country_phase2_readiness_summary` for quick country completeness scans, and labor/inflation/trade diagnostic views, including compact labor/inflation/GDP conflict summary entry points for routine inspection.
+- `ddl/08_marts_and_views.sql`: first Phase 1 marts and diagnostic views on the published/audit spine, including `mart.dataset_pipeline_health` for dataset-level operating health, `mart.dataset_pipeline_alerts` for alert-only monitoring, the first proper labor/inflation/trade/external-balance Phase 2 marts, the combined macro-plus-external latest snapshot, a thinner `mart.mart_country_phase2_latest` operator surface plus `mart.mart_country_phase2_readiness_summary` and `mart.mart_country_phase2_issues` for quick country completeness triage, and labor/inflation/trade diagnostic views, including compact labor/inflation/GDP conflict summary entry points for routine inspection.
 - `ddl/09_constraints_indexes.sql`: first Wave 8 hardening unit for constraints, indexes, and publish guards
 - `ddl/10_canonical_contract_followthrough.sql`: additive canonical-contract enforcement for comparability/source-switch lineage, including `mart.vw_macro_source_selection_lineage` for flattened source-selection diagnostics
 - `seeds/01_core_dimension_seeds.sql`: conformed core-dimension sync from `ref`
@@ -180,7 +180,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 - `scripts/load_ilostat_live.sh`: first live ILOSTAT loader for annual total unemployment rate, employment-to-population ratio, and labour force participation rate ages 15+, now defaulting to the canonical seeded country basket from `ref.country` across the widened 2019-2023 proof window, recorded as snapshot-backed evidence and published through the same warehouse contract.
 - `scripts/load_un_comtrade_live.sh`: first live UN Comtrade loader for annual total exports/imports against World partner totals, now using targeted reporter-code requests derived from the canonical seeded country basket across the widened 2019-2023 proof window, recorded as snapshot-backed evidence and published through the same warehouse contract.
 - `scripts/check_pipeline_alerts.sh`: exits non-zero when `mart.dataset_pipeline_alerts` contains any active alerts, for CI/cron health checks.
-- `queries/test_phase2_starter_marts.sql`: regression checks for the first proper labor mart, the inflation/trade/external-balance Phase 2 marts, the compact Phase 2 readiness/latest snapshots, and the verbose/deduped conflict diagnostics, with the noisy row dumps now gated behind `PHASE2_VERBOSE=1`.
+- `queries/test_phase2_starter_marts.sql`: regression checks for the first proper labor mart, the inflation/trade/external-balance Phase 2 marts, the compact Phase 2 readiness/issues/latest snapshots, and the verbose/deduped conflict diagnostics, with the noisy row dumps now gated behind `PHASE2_VERBOSE=1`.
 - `scripts/fetch_http_to_snapshot.py`: reusable fetch helper for saving HTTP payloads as local evidence files.
 - `scripts/fetch_uncomtrade_snapshot.py`: UN Comtrade-specific fetch helper that handles CSRF + POST query semantics and persists raw response snapshots.
 - `queries/`: SQL scripts for analysis.

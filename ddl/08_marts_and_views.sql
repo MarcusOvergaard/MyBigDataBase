@@ -2,6 +2,7 @@
 -- These analyst-facing surfaces build from the new published/audit contract rather than the legacy dw path.
 
 DROP VIEW IF EXISTS mart.country_latest_macro;
+DROP VIEW IF EXISTS mart.mart_country_phase2_issues CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_phase2_readiness_summary CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_phase2_latest CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_macro_plus_external_latest CASCADE;
@@ -485,6 +486,43 @@ SELECT
     ], NULL) AS missing_indicator_codes,
     c.latest_published_at
 FROM mart.mart_country_phase2_latest c;
+
+CREATE OR REPLACE VIEW mart.mart_country_phase2_issues AS
+SELECT
+    rs.country_key,
+    rs.iso_alpha_3,
+    rs.country_name,
+    rs.region_name,
+    rs.income_group,
+    rs.phase2_indicator_coverage_count,
+    rs.phase2_indicator_gap_count,
+    rs.labor_indicator_coverage_count,
+    rs.macro_trade_external_indicator_coverage_count,
+    rs.latest_phase2_observation_year,
+    rs.phase2_coverage_status,
+    rs.has_trade_pair,
+    rs.has_external_balance_pair,
+    rs.missing_indicator_codes,
+    CASE
+        WHEN rs.phase2_indicator_gap_count >= 3 THEN 'high'
+        WHEN rs.phase2_indicator_gap_count >= 1 THEN 'medium'
+        WHEN NOT rs.has_trade_pair OR NOT rs.has_external_balance_pair THEN 'medium'
+        ELSE 'low'
+    END AS issue_severity,
+    ARRAY_REMOVE(ARRAY[
+        CASE WHEN rs.phase2_indicator_gap_count > 0 THEN 'coverage_gap' END,
+        CASE WHEN rs.latest_phase2_observation_year IS NULL THEN 'no_phase2_data' END,
+        CASE WHEN rs.latest_phase2_observation_year IS NOT NULL AND rs.latest_phase2_observation_year < 2022 THEN 'stale_latest_year' END,
+        CASE WHEN NOT rs.has_trade_pair THEN 'missing_trade_pair' END,
+        CASE WHEN NOT rs.has_external_balance_pair THEN 'missing_external_balance_pair' END
+    ], NULL) AS issue_flags,
+    rs.latest_published_at
+FROM mart.mart_country_phase2_readiness_summary rs
+WHERE rs.phase2_coverage_status <> 'complete'
+   OR rs.latest_phase2_observation_year IS NULL
+   OR rs.latest_phase2_observation_year < 2022
+   OR NOT rs.has_trade_pair
+   OR NOT rs.has_external_balance_pair;
 
 CREATE OR REPLACE VIEW mart.vw_macro_published_with_lineage AS
 SELECT

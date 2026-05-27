@@ -63,6 +63,12 @@ DECLARE
     phase2_readiness_invalid_labor_coverage_count INT;
     phase2_readiness_invalid_macro_trade_external_coverage_count INT;
     phase2_readiness_invalid_status_count INT;
+    phase2_issues_row_count INT;
+    phase2_issues_expected_row_count INT;
+    phase2_issues_invalid_complete_count INT;
+    phase2_issues_invalid_flag_count INT;
+    phase2_issues_invalid_severity_count INT;
+    phase2_issues_invalid_severity_logic_count INT;
     macro_plus_external_row_count INT;
     employment_populated_count INT;
     labor_force_participation_populated_count INT;
@@ -799,6 +805,67 @@ BEGIN
     END IF;
 
     SELECT COUNT(*)
+    INTO phase2_issues_row_count
+    FROM mart.mart_country_phase2_issues;
+
+    SELECT COUNT(*)
+    INTO phase2_issues_expected_row_count
+    FROM mart.mart_country_phase2_readiness_summary
+    WHERE phase2_coverage_status <> 'complete'
+       OR latest_phase2_observation_year IS NULL
+       OR latest_phase2_observation_year < 2022
+       OR NOT has_trade_pair
+       OR NOT has_external_balance_pair;
+
+    IF phase2_issues_row_count <> phase2_issues_expected_row_count THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_issues row count % did not match expected issue row count %', phase2_issues_row_count, phase2_issues_expected_row_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_issues_invalid_complete_count
+    FROM mart.mart_country_phase2_issues
+    WHERE phase2_coverage_status = 'complete'
+      AND has_trade_pair
+      AND has_external_balance_pair;
+
+    IF phase2_issues_invalid_complete_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_issues contains % fully complete row(s)', phase2_issues_invalid_complete_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_issues_invalid_flag_count
+    FROM mart.mart_country_phase2_issues
+    WHERE COALESCE(cardinality(issue_flags), 0) = 0;
+
+    IF phase2_issues_invalid_flag_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_issues has % row(s) without issue_flags', phase2_issues_invalid_flag_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_issues_invalid_severity_count
+    FROM mart.mart_country_phase2_issues
+    WHERE issue_severity NOT IN ('low', 'medium', 'high');
+
+    IF phase2_issues_invalid_severity_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_issues has % row(s) with invalid issue_severity values', phase2_issues_invalid_severity_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_issues_invalid_severity_logic_count
+    FROM mart.mart_country_phase2_issues
+    WHERE issue_severity <>
+        CASE
+            WHEN phase2_indicator_gap_count >= 3 THEN 'high'
+            WHEN phase2_indicator_gap_count >= 1 THEN 'medium'
+            WHEN NOT has_trade_pair OR NOT has_external_balance_pair THEN 'medium'
+            ELSE 'low'
+        END;
+
+    IF phase2_issues_invalid_severity_logic_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_issues has % row(s) with inconsistent issue_severity logic', phase2_issues_invalid_severity_logic_count;
+    END IF;
+
+    SELECT COUNT(*)
     INTO macro_plus_external_row_count
     FROM mart.mart_country_macro_plus_external_latest;
 
@@ -964,6 +1031,28 @@ SELECT
     country_name,
     phase2_indicator_coverage_count,
     phase2_indicator_gap_count,
+    phase2_coverage_status,
+    has_trade_pair,
+    has_external_balance_pair,
+    issue_severity,
+    issue_flags,
+    missing_indicator_codes,
+    latest_phase2_observation_year,
+    latest_published_at
+FROM mart.mart_country_phase2_issues
+ORDER BY phase2_indicator_gap_count DESC, latest_phase2_observation_year NULLS FIRST, iso_alpha_3
+LIMIT 10;
+
+\if :{?PHASE2_VERBOSE}
+\else
+\set PHASE2_VERBOSE 0
+\endif
+\if :PHASE2_VERBOSE
+SELECT
+    iso_alpha_3,
+    country_name,
+    phase2_indicator_coverage_count,
+    phase2_indicator_gap_count,
     labor_indicator_coverage_count,
     macro_trade_external_indicator_coverage_count,
     latest_phase2_observation_year,
@@ -976,11 +1065,6 @@ FROM mart.mart_country_phase2_readiness_summary
 ORDER BY phase2_indicator_gap_count DESC, iso_alpha_3
 LIMIT 10;
 
-\if :{?PHASE2_VERBOSE}
-\else
-\set PHASE2_VERBOSE 0
-\endif
-\if :PHASE2_VERBOSE
 SELECT
     iso_alpha_3,
     country_name,
