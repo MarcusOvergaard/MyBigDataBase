@@ -55,6 +55,14 @@ DECLARE
     phase2_qa_invalid_dataset_count INT;
     phase2_qa_invalid_status_count INT;
     latest_row_count INT;
+    phase2_readiness_summary_row_count INT;
+    phase2_readiness_invalid_gap_count INT;
+    phase2_readiness_invalid_missing_indicator_count INT;
+    phase2_readiness_invalid_trade_pair_count INT;
+    phase2_readiness_invalid_external_pair_count INT;
+    phase2_readiness_invalid_labor_coverage_count INT;
+    phase2_readiness_invalid_macro_trade_external_coverage_count INT;
+    phase2_readiness_invalid_status_count INT;
     macro_plus_external_row_count INT;
     employment_populated_count INT;
     labor_force_participation_populated_count INT;
@@ -696,6 +704,101 @@ BEGIN
     END IF;
 
     SELECT COUNT(*)
+    INTO phase2_readiness_summary_row_count
+    FROM mart.mart_country_phase2_readiness_summary;
+
+    IF phase2_readiness_summary_row_count <> latest_row_count THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_readiness_summary row count % did not match mart_country_phase2_latest row count %', phase2_readiness_summary_row_count, latest_row_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_readiness_invalid_gap_count
+    FROM mart.mart_country_phase2_readiness_summary
+    WHERE phase2_indicator_gap_count <> 8 - phase2_indicator_coverage_count
+       OR phase2_indicator_gap_count < 0
+       OR phase2_indicator_gap_count > 8;
+
+    IF phase2_readiness_invalid_gap_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_readiness_summary has % row(s) with invalid gap counts', phase2_readiness_invalid_gap_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_readiness_invalid_missing_indicator_count
+    FROM mart.mart_country_phase2_readiness_summary
+    WHERE COALESCE(cardinality(missing_indicator_codes), 0) <> phase2_indicator_gap_count;
+
+    IF phase2_readiness_invalid_missing_indicator_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_readiness_summary has % row(s) where missing_indicator_codes does not match phase2_indicator_gap_count', phase2_readiness_invalid_missing_indicator_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_readiness_invalid_trade_pair_count
+    FROM mart.mart_country_phase2_readiness_summary rs
+    JOIN mart.mart_country_phase2_latest l USING (country_key)
+    WHERE rs.has_trade_pair <> (l.trade_exports_curr_usd_year IS NOT NULL AND l.trade_imports_curr_usd_year IS NOT NULL);
+
+    IF phase2_readiness_invalid_trade_pair_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_readiness_summary has % row(s) with incorrect has_trade_pair flags', phase2_readiness_invalid_trade_pair_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_readiness_invalid_external_pair_count
+    FROM mart.mart_country_phase2_readiness_summary rs
+    JOIN mart.mart_country_phase2_latest l USING (country_key)
+    WHERE rs.has_external_balance_pair <> (l.current_account_balance_curr_usd_year IS NOT NULL AND l.current_account_balance_pct_gdp_year IS NOT NULL);
+
+    IF phase2_readiness_invalid_external_pair_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_readiness_summary has % row(s) with incorrect has_external_balance_pair flags', phase2_readiness_invalid_external_pair_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_readiness_invalid_labor_coverage_count
+    FROM mart.mart_country_phase2_readiness_summary rs
+    JOIN mart.mart_country_phase2_latest l USING (country_key)
+    WHERE rs.labor_indicator_coverage_count <>
+        (
+            CASE WHEN l.employment_rate_pct_year IS NOT NULL THEN 1 ELSE 0 END
+          + CASE WHEN l.labor_force_participation_rate_pct_year IS NOT NULL THEN 1 ELSE 0 END
+          + CASE WHEN l.unemployment_rate_pct_year IS NOT NULL THEN 1 ELSE 0 END
+        );
+
+    IF phase2_readiness_invalid_labor_coverage_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_readiness_summary has % row(s) with incorrect labor_indicator_coverage_count', phase2_readiness_invalid_labor_coverage_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_readiness_invalid_macro_trade_external_coverage_count
+    FROM mart.mart_country_phase2_readiness_summary rs
+    JOIN mart.mart_country_phase2_latest l USING (country_key)
+    WHERE rs.macro_trade_external_indicator_coverage_count <>
+        (
+            CASE WHEN l.inflation_cpi_pct_year IS NOT NULL THEN 1 ELSE 0 END
+          + CASE WHEN l.trade_exports_curr_usd_year IS NOT NULL THEN 1 ELSE 0 END
+          + CASE WHEN l.trade_imports_curr_usd_year IS NOT NULL THEN 1 ELSE 0 END
+          + CASE WHEN l.current_account_balance_curr_usd_year IS NOT NULL THEN 1 ELSE 0 END
+          + CASE WHEN l.current_account_balance_pct_gdp_year IS NOT NULL THEN 1 ELSE 0 END
+        );
+
+    IF phase2_readiness_invalid_macro_trade_external_coverage_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_readiness_summary has % row(s) with incorrect macro_trade_external_indicator_coverage_count', phase2_readiness_invalid_macro_trade_external_coverage_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_readiness_invalid_status_count
+    FROM mart.mart_country_phase2_readiness_summary
+    WHERE phase2_coverage_status <>
+        CASE
+            WHEN phase2_indicator_coverage_count = 8 THEN 'complete'
+            WHEN phase2_indicator_coverage_count >= 6 THEN 'mostly_complete'
+            WHEN phase2_indicator_coverage_count >= 1 THEN 'partial'
+            ELSE 'empty'
+        END;
+
+    IF phase2_readiness_invalid_status_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_readiness_summary has % row(s) with incorrect phase2_coverage_status values', phase2_readiness_invalid_status_count;
+    END IF;
+
+    SELECT COUNT(*)
     INTO macro_plus_external_row_count
     FROM mart.mart_country_macro_plus_external_latest;
 
@@ -860,6 +963,28 @@ SELECT
     iso_alpha_3,
     country_name,
     phase2_indicator_coverage_count,
+    phase2_indicator_gap_count,
+    labor_indicator_coverage_count,
+    macro_trade_external_indicator_coverage_count,
+    latest_phase2_observation_year,
+    phase2_coverage_status,
+    has_trade_pair,
+    has_external_balance_pair,
+    missing_indicator_codes,
+    latest_published_at
+FROM mart.mart_country_phase2_readiness_summary
+ORDER BY phase2_indicator_gap_count DESC, iso_alpha_3
+LIMIT 10;
+
+\if :{?PHASE2_VERBOSE}
+\else
+\set PHASE2_VERBOSE 0
+\endif
+\if :PHASE2_VERBOSE
+SELECT
+    iso_alpha_3,
+    country_name,
+    phase2_indicator_coverage_count,
     latest_phase2_observation_year,
     employment_rate_pct_year,
     employment_rate_pct,
@@ -882,11 +1007,6 @@ FROM mart.mart_country_phase2_latest
 ORDER BY iso_alpha_3
 LIMIT 10;
 
-\if :{?PHASE2_VERBOSE}
-\else
-\set PHASE2_VERBOSE 0
-\endif
-\if :PHASE2_VERBOSE
 SELECT
     iso_alpha_3,
     country_name,

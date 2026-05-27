@@ -2,6 +2,7 @@
 -- These analyst-facing surfaces build from the new published/audit contract rather than the legacy dw path.
 
 DROP VIEW IF EXISTS mart.country_latest_macro;
+DROP VIEW IF EXISTS mart.mart_country_phase2_readiness_summary CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_phase2_latest CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_macro_plus_external_latest CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_trade_external_panel_annual CASCADE;
@@ -441,6 +442,49 @@ SELECT
     mpe.trade_balance_direction,
     mpe.latest_published_at
 FROM mart.mart_country_macro_plus_external_latest mpe;
+
+CREATE OR REPLACE VIEW mart.mart_country_phase2_readiness_summary AS
+SELECT
+    c.country_key,
+    c.iso_alpha_3,
+    c.country_name,
+    c.region_name,
+    c.income_group,
+    c.phase2_indicator_coverage_count,
+    8 - c.phase2_indicator_coverage_count AS phase2_indicator_gap_count,
+    (
+        CASE WHEN c.employment_rate_pct_year IS NOT NULL THEN 1 ELSE 0 END
+      + CASE WHEN c.labor_force_participation_rate_pct_year IS NOT NULL THEN 1 ELSE 0 END
+      + CASE WHEN c.unemployment_rate_pct_year IS NOT NULL THEN 1 ELSE 0 END
+    ) AS labor_indicator_coverage_count,
+    (
+        CASE WHEN c.inflation_cpi_pct_year IS NOT NULL THEN 1 ELSE 0 END
+      + CASE WHEN c.trade_exports_curr_usd_year IS NOT NULL THEN 1 ELSE 0 END
+      + CASE WHEN c.trade_imports_curr_usd_year IS NOT NULL THEN 1 ELSE 0 END
+      + CASE WHEN c.current_account_balance_curr_usd_year IS NOT NULL THEN 1 ELSE 0 END
+      + CASE WHEN c.current_account_balance_pct_gdp_year IS NOT NULL THEN 1 ELSE 0 END
+    ) AS macro_trade_external_indicator_coverage_count,
+    c.latest_phase2_observation_year,
+    CASE
+        WHEN c.phase2_indicator_coverage_count = 8 THEN 'complete'
+        WHEN c.phase2_indicator_coverage_count >= 6 THEN 'mostly_complete'
+        WHEN c.phase2_indicator_coverage_count >= 1 THEN 'partial'
+        ELSE 'empty'
+    END AS phase2_coverage_status,
+    (c.trade_exports_curr_usd_year IS NOT NULL AND c.trade_imports_curr_usd_year IS NOT NULL) AS has_trade_pair,
+    (c.current_account_balance_curr_usd_year IS NOT NULL AND c.current_account_balance_pct_gdp_year IS NOT NULL) AS has_external_balance_pair,
+    ARRAY_REMOVE(ARRAY[
+        CASE WHEN c.employment_rate_pct_year IS NULL THEN 'EMPLOYMENT_RATE_PCT' END,
+        CASE WHEN c.labor_force_participation_rate_pct_year IS NULL THEN 'LABOR_FORCE_PARTICIPATION_RATE_PCT' END,
+        CASE WHEN c.unemployment_rate_pct_year IS NULL THEN 'UNEMPLOYMENT_RATE_PCT' END,
+        CASE WHEN c.inflation_cpi_pct_year IS NULL THEN 'INFLATION_CPI_PCT' END,
+        CASE WHEN c.trade_exports_curr_usd_year IS NULL THEN 'TRADE_EXPORTS_CURR_USD' END,
+        CASE WHEN c.trade_imports_curr_usd_year IS NULL THEN 'TRADE_IMPORTS_CURR_USD' END,
+        CASE WHEN c.current_account_balance_curr_usd_year IS NULL THEN 'CURRENT_ACCOUNT_BALANCE_CURR_USD' END,
+        CASE WHEN c.current_account_balance_pct_gdp_year IS NULL THEN 'CURRENT_ACCOUNT_BALANCE_PCT_GDP' END
+    ], NULL) AS missing_indicator_codes,
+    c.latest_published_at
+FROM mart.mart_country_phase2_latest c;
 
 CREATE OR REPLACE VIEW mart.vw_macro_published_with_lineage AS
 SELECT
