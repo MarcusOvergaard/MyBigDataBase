@@ -4,8 +4,26 @@
 ALTER TABLE staging.country_observation_annual
     DROP CONSTRAINT IF EXISTS country_observation_annual_raw_row_key_fkey;
 
-ALTER TABLE audit.pipeline_run
-    ALTER COLUMN status_code TYPE VARCHAR(30);
+DROP VIEW IF EXISTS mart.vw_phase2_dataset_status_history_scan CASCADE;
+DROP VIEW IF EXISTS mart.mart_phase2_dataset_status_history CASCADE;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'audit'
+          AND table_name = 'pipeline_run'
+          AND column_name = 'status_code'
+          AND (
+              data_type <> 'character varying'
+              OR character_maximum_length IS DISTINCT FROM 30
+          )
+    ) THEN
+        ALTER TABLE audit.pipeline_run
+            ALTER COLUMN status_code TYPE VARCHAR(30);
+    END IF;
+END $$;
 
 ALTER TABLE core.fact_country_indicator_version
     ADD COLUMN IF NOT EXISTS comparability_break_flag BOOLEAN NOT NULL DEFAULT FALSE,
