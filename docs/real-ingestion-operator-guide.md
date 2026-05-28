@@ -205,9 +205,11 @@ make phase2-operator-report
 
 Stronger path:
 ```bash
-make test-live-contracts-offline
-make test-phase2-offline
+make check-alerts
+make phase2-operator-report
 ```
+
+This keeps you on the current live-run state instead of resetting the database underneath yourself.
 
 If you just changed one loader, use its narrower contract test when available:
 ```bash
@@ -270,6 +272,12 @@ make test-phase2-monitoring-offline
 make test-phase2-offline
 ```
 - runs SQL regression coverage plus monitoring-wrapper smoke coverage together
+
+### After changing the overall real-ingestion contract path
+```bash
+make test-real-ingestion-offline
+```
+- re-initializes the local warehouse schema, reruns all fixture-backed live contracts, and then runs the Phase 2 offline bundle in one shot
 
 ## 8. Minimal mental model
 

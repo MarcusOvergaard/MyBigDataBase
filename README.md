@@ -247,7 +247,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 - Recommended naming pattern:
   - `ingest/snapshots/wdi/<dataset>/<YYYYMMDDTHHMMSSZ>.json`
   - `ingest/snapshots/ifs/<dataset>/<YYYYMMDDTHHMMSSZ>.json`
-- The warehouse should later link each fetched snapshot to a `raw.source_batch` row so the raw evidence, fetch metadata, and published facts stay traceable together.
+- The warehouse now links each fetched snapshot to a `raw.source_batch` row through `raw.source_snapshot`, so the raw evidence, fetch metadata, and published facts stay traceable together.
 
 ## Real ingestion operator guide
 - If you want the practical runbook for live loaders, failure triage, reruns, snapshot locations, and published-result verification, read `docs/real-ingestion-operator-guide.md`.
@@ -260,5 +260,12 @@ make init load-sample build-mart test repeat-load-test
 ```
 
 CI now runs that same end-to-end Phase 1 contract path, including the repeat-load regression check, in `.github/workflows/phase1-contract.yml`.
+
+Default offline real-ingestion proof bundle:
+```bash
+make test-real-ingestion-offline
+```
+
+That one command re-initializes the local warehouse schema, reruns every fixture-backed live contract, and then runs the compact Phase 2 SQL plus monitoring-wrapper regressions.
 
 The legacy compatibility commands and `mart.country_latest_macro` alias have been retired so the repo has one default execution path.

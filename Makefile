@@ -10,7 +10,7 @@ PSQL = $(PSQL_BASE) -d $(DB_NAME)
 export DB_NAME
 export PSQL_CMD = $(PSQL_BASE)
 
-.PHONY: init create-db ddl seed load-sample load-wdi-live load-wdi-labor-live load-ifs-live load-weo-live load-ilostat-live load-un-comtrade-live clean-ifs-stale-snapshots build-mart test check-alerts test-live-wdi-contract test-live-wdi-labor-contract test-live-ifs-contract test-live-weo-contract test-live-ilostat-contract test-live-un-comtrade-contract test-live-contracts test-live-contracts-offline test-phase2-starter-marts-offline test-phase2-starter-marts-debug test-phase2-monitoring-offline test-phase2-offline phase2-operator-scan phase2-operator-report phase2-operator-watchdog repeat-load-test all
+.PHONY: init create-db ddl seed load-sample load-wdi-live load-wdi-labor-live load-ifs-live load-weo-live load-ilostat-live load-un-comtrade-live clean-ifs-stale-snapshots build-mart test check-alerts test-live-wdi-contract test-live-wdi-labor-contract test-live-ifs-contract test-live-weo-contract test-live-ilostat-contract test-live-un-comtrade-contract test-live-contracts test-live-contracts-offline test-phase2-starter-marts-offline test-phase2-starter-marts-debug test-phase2-monitoring-offline test-phase2-offline test-real-ingestion-offline phase2-operator-scan phase2-operator-report phase2-operator-watchdog repeat-load-test all
 
 all: init
 
@@ -153,6 +153,14 @@ test-phase2-monitoring-offline:
 
 # Re-run the compact offline Phase 2 SQL regressions plus monitoring wrapper smoke tests
 test-phase2-offline: test-phase2-starter-marts-offline test-phase2-monitoring-offline
+
+# Re-run the full offline real-ingestion proof: bootstrap, fixture-backed live loaders, and Phase 2 regressions
+test-real-ingestion-offline:
+	@$(MAKE) init test-live-contracts-offline test-phase2-offline \
+		DB_NAME='$(DB_NAME)' \
+		DB_HOST='$(DB_HOST)' \
+		DB_PORT='$(DB_PORT)' \
+		DB_USER='$(DB_USER)'
 
 # Run the compact Phase 2 operator scan over the latest dataset and batch surfaces
 phase2-operator-scan:
