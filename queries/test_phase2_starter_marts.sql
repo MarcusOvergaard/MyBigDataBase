@@ -93,6 +93,14 @@ DECLARE
     phase2_ingestion_gap_invalid_count_arithmetic_count INT;
     phase2_ingestion_gap_unexpected_published_count INT;
     phase2_ingestion_gap_china_lfpr_mismatch_count INT;
+    phase2_dataset_ingestion_rollup_row_count INT;
+    phase2_dataset_ingestion_rollup_expected_row_count INT;
+    phase2_dataset_ingestion_rollup_duplicate_row_count INT;
+    phase2_dataset_ingestion_rollup_invalid_stage_count INT;
+    phase2_dataset_ingestion_rollup_invalid_status_count INT;
+    phase2_dataset_ingestion_rollup_invalid_stage_arithmetic_count INT;
+    phase2_dataset_ingestion_rollup_invalid_status_arithmetic_count INT;
+    phase2_dataset_ingestion_rollup_china_lfpr_mismatch_count INT;
     macro_plus_external_row_count INT;
     employment_populated_count INT;
     labor_force_participation_populated_count INT;
@@ -1175,6 +1183,117 @@ BEGIN
     END IF;
 
     SELECT COUNT(*)
+    INTO phase2_dataset_ingestion_rollup_row_count
+    FROM mart.mart_phase2_dataset_ingestion_gap_rollup;
+
+    SELECT COUNT(DISTINCT expected_source_dataset_key)
+    INTO phase2_dataset_ingestion_rollup_expected_row_count
+    FROM mart.mart_country_phase2_ingestion_gap_explainer;
+
+    IF phase2_dataset_ingestion_rollup_row_count <> phase2_dataset_ingestion_rollup_expected_row_count THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_ingestion_gap_rollup row count % did not match distinct expected-dataset gap count %', phase2_dataset_ingestion_rollup_row_count, phase2_dataset_ingestion_rollup_expected_row_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_ingestion_rollup_duplicate_row_count
+    FROM (
+        SELECT expected_source_dataset_key, COUNT(*) AS row_count
+        FROM mart.mart_phase2_dataset_ingestion_gap_rollup
+        GROUP BY expected_source_dataset_key
+        HAVING COUNT(*) <> 1
+    ) duplicate_rows;
+
+    IF phase2_dataset_ingestion_rollup_duplicate_row_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_ingestion_gap_rollup has % duplicated expected-dataset key(s)', phase2_dataset_ingestion_rollup_duplicate_row_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_ingestion_rollup_invalid_stage_count
+    FROM mart.mart_phase2_dataset_ingestion_gap_rollup
+    WHERE dominant_gap_stage NOT IN ('fetch_scope', 'normalization', 'qa_blocking', 'publication');
+
+    IF phase2_dataset_ingestion_rollup_invalid_stage_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_ingestion_gap_rollup has % row(s) with invalid dominant_gap_stage values', phase2_dataset_ingestion_rollup_invalid_stage_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_ingestion_rollup_invalid_status_count
+    FROM mart.mart_phase2_dataset_ingestion_gap_rollup
+    WHERE dominant_gap_status NOT IN (
+        'no_expected_dataset_batch_history',
+        'missing_snapshot_evidence_for_latest_batch',
+        'country_not_present_in_latest_raw_landing',
+        'indicator_not_present_for_country_in_latest_raw_landing',
+        'raw_landed_but_not_normalized_to_staging',
+        'blocked_by_publish_qa',
+        'staged_but_not_versioned',
+        'publish_run_not_successful',
+        'versioned_but_not_visible_in_published_surface',
+        'gap_resolved_elsewhere'
+    );
+
+    IF phase2_dataset_ingestion_rollup_invalid_status_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_ingestion_gap_rollup has % row(s) with invalid dominant_gap_status values', phase2_dataset_ingestion_rollup_invalid_status_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_ingestion_rollup_invalid_stage_arithmetic_count
+    FROM mart.mart_phase2_dataset_ingestion_gap_rollup
+    WHERE missing_country_indicator_count < affected_country_count
+       OR missing_country_indicator_count < affected_indicator_count
+       OR missing_country_indicator_count < dominant_gap_stage_count
+       OR fetch_scope_gap_count + normalization_gap_count + qa_blocking_gap_count + publication_gap_count <> missing_country_indicator_count;
+
+    IF phase2_dataset_ingestion_rollup_invalid_stage_arithmetic_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_ingestion_gap_rollup has % row(s) with inconsistent stage arithmetic', phase2_dataset_ingestion_rollup_invalid_stage_arithmetic_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_ingestion_rollup_invalid_status_arithmetic_count
+    FROM mart.mart_phase2_dataset_ingestion_gap_rollup
+    WHERE missing_country_indicator_count < dominant_gap_status_count
+       OR no_expected_dataset_batch_history_count
+        + missing_snapshot_evidence_for_latest_batch_count
+        + country_not_present_in_latest_raw_landing_count
+        + indicator_not_present_for_country_in_latest_raw_landing_count
+        + raw_landed_but_not_normalized_to_staging_count
+        + blocked_by_publish_qa_count
+        + staged_but_not_versioned_count
+        + publish_run_not_successful_count
+        + versioned_but_not_visible_in_published_surface_count
+        + gap_resolved_elsewhere_count <> missing_country_indicator_count;
+
+    IF phase2_dataset_ingestion_rollup_invalid_status_arithmetic_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_ingestion_gap_rollup has % row(s) with inconsistent status arithmetic', phase2_dataset_ingestion_rollup_invalid_status_arithmetic_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_ingestion_rollup_china_lfpr_mismatch_count
+    FROM mart.mart_phase2_dataset_ingestion_gap_rollup
+    WHERE expected_dataset_code = 'ILOSTAT'
+      AND NOT (
+            missing_country_indicator_count = 1
+        AND affected_country_count = 1
+        AND affected_indicator_count = 1
+        AND affected_country_iso_alpha_3_codes::text[] = ARRAY['CHN']::text[]
+        AND affected_indicator_codes::text[] = ARRAY['LABOR_FORCE_PARTICIPATION_RATE_PCT']::text[]
+        AND fetch_scope_gap_count = 1
+        AND normalization_gap_count = 0
+        AND qa_blocking_gap_count = 0
+        AND publication_gap_count = 0
+        AND indicator_not_present_for_country_in_latest_raw_landing_count = 1
+        AND dominant_gap_stage = 'fetch_scope'
+        AND dominant_gap_stage_count = 1
+        AND dominant_gap_status = 'indicator_not_present_for_country_in_latest_raw_landing'
+        AND dominant_gap_status_count = 1
+        AND latest_expected_manifest_path IS NOT NULL
+      );
+
+    IF phase2_dataset_ingestion_rollup_china_lfpr_mismatch_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_ingestion_gap_rollup lost the seeded ILOSTAT fetch-scope proof';
+    END IF;
+
+    SELECT COUNT(*)
     INTO macro_plus_external_row_count
     FROM mart.mart_country_macro_plus_external_latest;
 
@@ -1383,6 +1502,23 @@ ORDER BY iso_alpha_3, indicator_code
 LIMIT 12;
 
 SELECT
+    expected_dataset_code,
+    missing_country_indicator_count,
+    affected_country_count,
+    affected_indicator_count,
+    dominant_gap_stage,
+    dominant_gap_status,
+    fetch_scope_gap_count,
+    normalization_gap_count,
+    qa_blocking_gap_count,
+    publication_gap_count,
+    affected_country_iso_alpha_3_codes,
+    affected_indicator_codes
+FROM mart.mart_phase2_dataset_ingestion_gap_rollup
+ORDER BY missing_country_indicator_count DESC, expected_dataset_code
+LIMIT 12;
+
+SELECT
     iso_alpha_3,
     country_name,
     phase2_indicator_coverage_count,
@@ -1462,6 +1598,34 @@ SELECT
 FROM mart.mart_country_phase2_ingestion_gap_explainer
 ORDER BY iso_alpha_3, indicator_code
 LIMIT 24;
+
+SELECT
+    expected_dataset_code,
+    missing_country_indicator_count,
+    affected_country_count,
+    affected_indicator_count,
+    affected_country_iso_alpha_3_codes,
+    affected_indicator_codes,
+    fetch_scope_gap_count,
+    normalization_gap_count,
+    qa_blocking_gap_count,
+    publication_gap_count,
+    no_expected_dataset_batch_history_count,
+    indicator_not_present_for_country_in_latest_raw_landing_count,
+    raw_landed_but_not_normalized_to_staging_count,
+    blocked_by_publish_qa_count,
+    publish_run_not_successful_count,
+    versioned_but_not_visible_in_published_surface_count,
+    dominant_gap_stage,
+    dominant_gap_stage_count,
+    dominant_gap_status,
+    dominant_gap_status_count,
+    latest_expected_batch_external_id,
+    latest_expected_manifest_path,
+    latest_expected_publish_status
+FROM mart.mart_phase2_dataset_ingestion_gap_rollup
+ORDER BY missing_country_indicator_count DESC, expected_dataset_code
+LIMIT 12;
 
 SELECT
     iso_alpha_3,

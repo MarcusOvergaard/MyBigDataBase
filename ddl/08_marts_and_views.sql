@@ -2814,3 +2814,92 @@ LEFT JOIN current_expected_dataset_published_counts cepc
   ON cepc.source_dataset_key = md.expected_source_dataset_key
  AND cepc.country_key = md.country_key
  AND cepc.indicator_key = md.indicator_key;
+
+CREATE OR REPLACE VIEW mart.mart_phase2_dataset_ingestion_gap_rollup AS
+WITH gap_rows AS (
+    SELECT
+        ig.expected_source_dataset_key,
+        ig.expected_dataset_code,
+        ig.expected_dataset_name,
+        ig.expected_source_code,
+        ig.expected_source_name,
+        ig.iso_alpha_3,
+        ig.indicator_code,
+        ig.gap_stage,
+        ig.gap_status,
+        ig.latest_expected_batch_external_id,
+        ig.latest_expected_manifest_path,
+        ig.latest_expected_batch_fetched_at,
+        ig.latest_expected_batch_source_released_at,
+        ig.latest_expected_publish_status
+    FROM mart.mart_country_phase2_ingestion_gap_explainer ig
+),
+stage_counts AS (
+    SELECT
+        gr.expected_source_dataset_key,
+        gr.gap_stage,
+        COUNT(*) AS gap_stage_count,
+        ROW_NUMBER() OVER (
+            PARTITION BY gr.expected_source_dataset_key
+            ORDER BY COUNT(*) DESC, gr.gap_stage ASC
+        ) AS gap_stage_rank
+    FROM gap_rows gr
+    GROUP BY gr.expected_source_dataset_key, gr.gap_stage
+),
+status_counts AS (
+    SELECT
+        gr.expected_source_dataset_key,
+        gr.gap_status,
+        COUNT(*) AS gap_status_count,
+        ROW_NUMBER() OVER (
+            PARTITION BY gr.expected_source_dataset_key
+            ORDER BY COUNT(*) DESC, gr.gap_status ASC
+        ) AS gap_status_rank
+    FROM gap_rows gr
+    GROUP BY gr.expected_source_dataset_key, gr.gap_status
+)
+SELECT
+    gr.expected_source_dataset_key,
+    gr.expected_dataset_code,
+    gr.expected_dataset_name,
+    gr.expected_source_code,
+    gr.expected_source_name,
+    COUNT(*) AS missing_country_indicator_count,
+    COUNT(DISTINCT gr.iso_alpha_3) AS affected_country_count,
+    COUNT(DISTINCT gr.indicator_code) AS affected_indicator_count,
+    ARRAY_AGG(DISTINCT gr.iso_alpha_3 ORDER BY gr.iso_alpha_3) AS affected_country_iso_alpha_3_codes,
+    ARRAY_AGG(DISTINCT gr.indicator_code ORDER BY gr.indicator_code) AS affected_indicator_codes,
+    COUNT(*) FILTER (WHERE gr.gap_stage = 'fetch_scope') AS fetch_scope_gap_count,
+    COUNT(*) FILTER (WHERE gr.gap_stage = 'normalization') AS normalization_gap_count,
+    COUNT(*) FILTER (WHERE gr.gap_stage = 'qa_blocking') AS qa_blocking_gap_count,
+    COUNT(*) FILTER (WHERE gr.gap_stage = 'publication') AS publication_gap_count,
+    COUNT(*) FILTER (WHERE gr.gap_status = 'no_expected_dataset_batch_history') AS no_expected_dataset_batch_history_count,
+    COUNT(*) FILTER (WHERE gr.gap_status = 'missing_snapshot_evidence_for_latest_batch') AS missing_snapshot_evidence_for_latest_batch_count,
+    COUNT(*) FILTER (WHERE gr.gap_status = 'country_not_present_in_latest_raw_landing') AS country_not_present_in_latest_raw_landing_count,
+    COUNT(*) FILTER (WHERE gr.gap_status = 'indicator_not_present_for_country_in_latest_raw_landing') AS indicator_not_present_for_country_in_latest_raw_landing_count,
+    COUNT(*) FILTER (WHERE gr.gap_status = 'raw_landed_but_not_normalized_to_staging') AS raw_landed_but_not_normalized_to_staging_count,
+    COUNT(*) FILTER (WHERE gr.gap_status = 'blocked_by_publish_qa') AS blocked_by_publish_qa_count,
+    COUNT(*) FILTER (WHERE gr.gap_status = 'staged_but_not_versioned') AS staged_but_not_versioned_count,
+    COUNT(*) FILTER (WHERE gr.gap_status = 'publish_run_not_successful') AS publish_run_not_successful_count,
+    COUNT(*) FILTER (WHERE gr.gap_status = 'versioned_but_not_visible_in_published_surface') AS versioned_but_not_visible_in_published_surface_count,
+    COUNT(*) FILTER (WHERE gr.gap_status = 'gap_resolved_elsewhere') AS gap_resolved_elsewhere_count,
+    MAX(CASE WHEN sc.gap_stage_rank = 1 THEN sc.gap_stage END) AS dominant_gap_stage,
+    MAX(CASE WHEN sc.gap_stage_rank = 1 THEN sc.gap_stage_count END) AS dominant_gap_stage_count,
+    MAX(CASE WHEN stc.gap_status_rank = 1 THEN stc.gap_status END) AS dominant_gap_status,
+    MAX(CASE WHEN stc.gap_status_rank = 1 THEN stc.gap_status_count END) AS dominant_gap_status_count,
+    MAX(gr.latest_expected_batch_external_id) AS latest_expected_batch_external_id,
+    MAX(gr.latest_expected_manifest_path) AS latest_expected_manifest_path,
+    MAX(gr.latest_expected_batch_fetched_at) AS latest_expected_batch_fetched_at,
+    MAX(gr.latest_expected_batch_source_released_at) AS latest_expected_batch_source_released_at,
+    MAX(gr.latest_expected_publish_status) AS latest_expected_publish_status
+FROM gap_rows gr
+LEFT JOIN stage_counts sc
+  ON sc.expected_source_dataset_key = gr.expected_source_dataset_key
+LEFT JOIN status_counts stc
+  ON stc.expected_source_dataset_key = gr.expected_source_dataset_key
+GROUP BY
+    gr.expected_source_dataset_key,
+    gr.expected_dataset_code,
+    gr.expected_dataset_name,
+    gr.expected_source_code,
+    gr.expected_source_name;
