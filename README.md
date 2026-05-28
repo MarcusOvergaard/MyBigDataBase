@@ -217,6 +217,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 - `scripts/test_phase2_monitoring_smoke.sh`: fixture-backed smoke test for the Phase 2 report/watchdog wrappers, including healthy and alert watchdog branches.
 - `scripts/fetch_http_to_snapshot.py`: reusable fetch helper for saving HTTP payloads as local evidence files.
 - `scripts/fetch_uncomtrade_snapshot.py`: UN Comtrade-specific fetch helper that handles CSRF + POST query semantics and persists raw response snapshots.
+- `docs/real-ingestion-operator-guide.md`: practical runbook for live-loader operation, snapshot/manifest locations, reruns, failure triage, and published-result verification.
 - `queries/`: SQL scripts for analysis.
 
 ## Adding New Data
@@ -247,6 +248,10 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
   - `ingest/snapshots/wdi/<dataset>/<YYYYMMDDTHHMMSSZ>.json`
   - `ingest/snapshots/ifs/<dataset>/<YYYYMMDDTHHMMSSZ>.json`
 - The warehouse should later link each fetched snapshot to a `raw.source_batch` row so the raw evidence, fetch metadata, and published facts stay traceable together.
+
+## Real ingestion operator guide
+- If you want the practical runbook for live loaders, failure triage, reruns, snapshot locations, and published-result verification, read `docs/real-ingestion-operator-guide.md`.
+- That guide is the fastest way to re-orient yourself on sample mode vs API mode and which tables/views to inspect first when a live run misbehaves.
 
 ## Maintenance
 Default Phase 1 developer checks:
