@@ -2,6 +2,8 @@
 -- These analyst-facing surfaces build from the new published/audit contract rather than the legacy dw path.
 
 DROP VIEW IF EXISTS mart.country_latest_macro;
+DROP VIEW IF EXISTS mart.vw_phase2_dataset_status_history_scan CASCADE;
+DROP VIEW IF EXISTS mart.vw_phase2_dataset_operator_panel_scan CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_phase2_ingestion_gap_explainer CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_phase2_dependency_explainer CASCADE;
 DROP VIEW IF EXISTS mart.mart_phase2_dataset_coverage_trend CASCADE;
@@ -2924,9 +2926,20 @@ WITH latest_coverage AS (
     GROUP BY dt.source_dataset_key
 ),
 phase2_indicator_catalog AS (
-    SELECT COUNT(*) AS required_phase2_indicator_count
-    FROM core.dim_indicator di
-    WHERE di.indicator_code IN (
+    SELECT
+        sd.source_dataset_key,
+        COUNT(DISTINCT i.indicator_key) AS required_phase2_indicator_count
+    FROM ref.source_dataset sd
+    JOIN ref.source_series rs
+      ON rs.source_dataset_key = sd.source_dataset_key
+     AND rs.is_active = TRUE
+    JOIN ref.indicator_source_series_map ism
+      ON ism.source_series_key = rs.source_series_key
+     AND ism.is_active = TRUE
+    JOIN core.dim_indicator i
+      ON i.indicator_key = ism.indicator_key
+    WHERE sd.dataset_code IN ('IFS', 'WEO', 'ILOSTAT', 'UN_COMTRADE_ANNUAL')
+      AND i.indicator_code IN (
         'EMPLOYMENT_RATE_PCT',
         'LABOR_FORCE_PARTICIPATION_RATE_PCT',
         'UNEMPLOYMENT_RATE_PCT',
@@ -2936,6 +2949,7 @@ phase2_indicator_catalog AS (
         'CURRENT_ACCOUNT_BALANCE_CURR_USD',
         'CURRENT_ACCOUNT_BALANCE_PCT_GDP'
     )
+    GROUP BY sd.source_dataset_key
 )
 SELECT
     q.source_dataset_key,
@@ -2997,11 +3011,55 @@ SELECT
     END AS operator_panel_status,
     q.anomaly_flags
 FROM mart.vw_domain_qa_summary_phase2 q
-CROSS JOIN phase2_indicator_catalog pic
+LEFT JOIN phase2_indicator_catalog pic
+  ON pic.source_dataset_key = q.source_dataset_key
 LEFT JOIN mart.mart_phase2_dataset_ingestion_gap_rollup igr
   ON igr.expected_source_dataset_key = q.source_dataset_key
 LEFT JOIN latest_coverage lc
   ON lc.source_dataset_key = q.source_dataset_key;
+
+CREATE OR REPLACE VIEW mart.vw_phase2_dataset_operator_panel_scan AS
+SELECT
+    op.source_dataset_key,
+    op.dataset_code,
+    op.dataset_name,
+    op.source_code,
+    op.source_name,
+    op.operator_panel_status,
+    CASE op.operator_panel_status
+        WHEN 'failing_active_gap' THEN 1
+        WHEN 'warning_coverage_gap' THEN 2
+        ELSE 3
+    END AS operator_attention_rank,
+    op.freshness_status,
+    op.latest_publish_status,
+    op.latest_phase2_observation_year,
+    op.latest_dataset_published_at,
+    op.current_phase2_indicator_count,
+    op.required_phase2_indicator_count,
+    op.latest_complete_indicator_count,
+    op.latest_gap_indicator_count,
+    ROUND(
+        op.latest_indicator_count::numeric / NULLIF(op.required_phase2_indicator_count, 0),
+        4
+    ) AS latest_indicator_coverage_ratio,
+    op.latest_covered_country_sum,
+    op.latest_expected_country_sum,
+    op.latest_missing_country_sum,
+    ROUND(
+        (op.latest_expected_country_sum - op.latest_missing_country_sum)::numeric
+        / NULLIF(op.latest_expected_country_sum, 0),
+        4
+    ) AS latest_country_coverage_ratio,
+    op.latest_gap_indicator_codes,
+    op.missing_country_indicator_count,
+    op.affected_country_count,
+    op.affected_indicator_count,
+    op.dominant_gap_stage,
+    op.dominant_gap_status,
+    op.affected_country_iso_alpha_3_codes,
+    op.affected_indicator_codes
+FROM mart.mart_phase2_dataset_operator_panel op;
 
 CREATE OR REPLACE VIEW mart.mart_phase2_dataset_status_history AS
 WITH phase2_indicator_contract AS (
@@ -3210,3 +3268,46 @@ SELECT
         ELSE 'phase2_output_present'
     END AS batch_status
 FROM ranked r;
+
+CREATE OR REPLACE VIEW mart.vw_phase2_dataset_status_history_scan AS
+SELECT
+    h.source_dataset_key,
+    h.dataset_code,
+    h.dataset_name,
+    h.source_code,
+    h.source_name,
+    h.source_batch_key,
+    h.batch_external_id,
+    h.batch_recency_rank,
+    h.is_latest_batch_for_dataset,
+    h.batch_status,
+    CASE h.batch_status
+        WHEN 'publish_failed' THEN 1
+        WHEN 'not_published' THEN 2
+        WHEN 'no_phase2_output' THEN 3
+        WHEN 'partial_indicator_coverage' THEN 4
+        WHEN 'partial_country_coverage' THEN 5
+        ELSE 6
+    END AS batch_status_rank,
+    h.source_released_at,
+    h.fetched_at,
+    h.published_at,
+    h.publish_status,
+    h.publish_blocking_qa_event_count,
+    h.phase2_indicator_count,
+    h.expected_phase2_indicator_count,
+    ROUND(
+        h.phase2_indicator_count::numeric / NULLIF(h.expected_phase2_indicator_count, 0),
+        4
+    ) AS indicator_coverage_ratio,
+    h.phase2_country_indicator_pair_count,
+    h.expected_phase2_country_indicator_pair_count,
+    ROUND(
+        h.phase2_country_indicator_pair_count::numeric
+        / NULLIF(h.expected_phase2_country_indicator_pair_count, 0),
+        4
+    ) AS country_indicator_pair_coverage_ratio,
+    h.phase2_country_indicator_pair_count_change_vs_prior_batch,
+    h.pair_coverage_trend_vs_prior_batch,
+    h.latest_phase2_observation_year_in_batch
+FROM mart.mart_phase2_dataset_status_history h;

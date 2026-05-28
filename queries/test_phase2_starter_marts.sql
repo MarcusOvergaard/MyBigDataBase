@@ -108,12 +108,19 @@ DECLARE
     phase2_dataset_operator_panel_invalid_status_count INT;
     phase2_dataset_operator_panel_invalid_operator_logic_count INT;
     phase2_dataset_operator_panel_ilostat_mismatch_count INT;
+    phase2_dataset_operator_panel_scan_row_count INT;
+    phase2_dataset_operator_panel_scan_invalid_rank_count INT;
+    phase2_dataset_operator_panel_scan_invalid_ratio_count INT;
+    phase2_dataset_operator_panel_scan_ratio_mismatch_count INT;
     phase2_dataset_status_history_row_count INT;
     phase2_dataset_status_history_expected_row_count INT;
     phase2_dataset_status_history_latest_row_count INT;
     phase2_dataset_status_history_duplicate_row_count INT;
     phase2_dataset_status_history_invalid_status_count INT;
     phase2_dataset_status_history_invalid_latest_rank_count INT;
+    phase2_dataset_status_history_scan_row_count INT;
+    phase2_dataset_status_history_scan_invalid_rank_count INT;
+    phase2_dataset_status_history_scan_invalid_ratio_count INT;
     macro_plus_external_row_count INT;
     employment_populated_count INT;
     labor_force_participation_populated_count INT;
@@ -1375,6 +1382,59 @@ BEGIN
     END IF;
 
     SELECT COUNT(*)
+    INTO phase2_dataset_operator_panel_scan_row_count
+    FROM mart.vw_phase2_dataset_operator_panel_scan;
+
+    IF phase2_dataset_operator_panel_scan_row_count <> phase2_dataset_operator_panel_row_count THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: vw_phase2_dataset_operator_panel_scan row count % did not match mart_phase2_dataset_operator_panel row count %', phase2_dataset_operator_panel_scan_row_count, phase2_dataset_operator_panel_row_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_operator_panel_scan_invalid_rank_count
+    FROM mart.vw_phase2_dataset_operator_panel_scan
+    WHERE operator_attention_rank <> CASE operator_panel_status
+        WHEN 'failing_active_gap' THEN 1
+        WHEN 'warning_coverage_gap' THEN 2
+        ELSE 3
+    END;
+
+    IF phase2_dataset_operator_panel_scan_invalid_rank_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: vw_phase2_dataset_operator_panel_scan has % row(s) with inconsistent operator_attention_rank', phase2_dataset_operator_panel_scan_invalid_rank_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_operator_panel_scan_invalid_ratio_count
+    FROM mart.vw_phase2_dataset_operator_panel_scan
+    WHERE latest_indicator_coverage_ratio IS NULL
+       OR latest_indicator_coverage_ratio < 0
+       OR latest_indicator_coverage_ratio > 1
+       OR latest_country_coverage_ratio IS NULL
+       OR latest_country_coverage_ratio < 0
+       OR latest_country_coverage_ratio > 1;
+
+    IF phase2_dataset_operator_panel_scan_invalid_ratio_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: vw_phase2_dataset_operator_panel_scan has % row(s) with invalid compact coverage ratios', phase2_dataset_operator_panel_scan_invalid_ratio_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_operator_panel_scan_ratio_mismatch_count
+    FROM mart.vw_phase2_dataset_operator_panel_scan
+    WHERE latest_indicator_coverage_ratio <> ROUND(
+            (latest_complete_indicator_count + latest_gap_indicator_count)::numeric
+            / NULLIF(required_phase2_indicator_count, 0),
+            4
+        )
+       OR latest_country_coverage_ratio <> ROUND(
+            (latest_expected_country_sum - latest_missing_country_sum)::numeric
+            / NULLIF(latest_expected_country_sum, 0),
+            4
+        );
+
+    IF phase2_dataset_operator_panel_scan_ratio_mismatch_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: vw_phase2_dataset_operator_panel_scan has % row(s) whose compact ratios do not match parent coverage arithmetic', phase2_dataset_operator_panel_scan_ratio_mismatch_count;
+    END IF;
+
+    SELECT COUNT(*)
     INTO phase2_dataset_status_history_row_count
     FROM mart.mart_phase2_dataset_status_history;
 
@@ -1434,6 +1494,44 @@ BEGIN
 
     IF phase2_dataset_status_history_invalid_latest_rank_count <> 0 THEN
         RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_status_history has % row(s) with inconsistent latest-batch ranking flags', phase2_dataset_status_history_invalid_latest_rank_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_status_history_scan_row_count
+    FROM mart.vw_phase2_dataset_status_history_scan;
+
+    IF phase2_dataset_status_history_scan_row_count <> phase2_dataset_status_history_row_count THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: vw_phase2_dataset_status_history_scan row count % did not match mart_phase2_dataset_status_history row count %', phase2_dataset_status_history_scan_row_count, phase2_dataset_status_history_row_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_status_history_scan_invalid_rank_count
+    FROM mart.vw_phase2_dataset_status_history_scan
+    WHERE batch_status_rank <> CASE batch_status
+        WHEN 'publish_failed' THEN 1
+        WHEN 'not_published' THEN 2
+        WHEN 'no_phase2_output' THEN 3
+        WHEN 'partial_indicator_coverage' THEN 4
+        WHEN 'partial_country_coverage' THEN 5
+        ELSE 6
+    END;
+
+    IF phase2_dataset_status_history_scan_invalid_rank_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: vw_phase2_dataset_status_history_scan has % row(s) with inconsistent batch_status_rank', phase2_dataset_status_history_scan_invalid_rank_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_status_history_scan_invalid_ratio_count
+    FROM mart.vw_phase2_dataset_status_history_scan
+    WHERE indicator_coverage_ratio IS NULL
+       OR indicator_coverage_ratio < 0
+       OR indicator_coverage_ratio > 1
+       OR country_indicator_pair_coverage_ratio IS NULL
+       OR country_indicator_pair_coverage_ratio < 0
+       OR country_indicator_pair_coverage_ratio > 1;
+
+    IF phase2_dataset_status_history_scan_invalid_ratio_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: vw_phase2_dataset_status_history_scan has % row(s) with invalid compact coverage ratios', phase2_dataset_status_history_scan_invalid_ratio_count;
     END IF;
 
     SELECT COUNT(*)
@@ -1814,62 +1912,49 @@ LIMIT 12;
 SELECT
     dataset_code,
     operator_panel_status,
+    operator_attention_rank,
     freshness_status,
     latest_publish_status,
-    current_phase2_indicator_count,
-    required_phase2_indicator_count,
-    latest_indicator_count,
-    latest_complete_indicator_count,
-    latest_gap_indicator_count,
-    latest_covered_country_sum,
-    latest_expected_country_sum,
-    latest_missing_country_sum,
-    latest_avg_coverage_ratio,
     latest_phase2_observation_year,
+    latest_dataset_published_at,
+    latest_complete_indicator_count,
+    required_phase2_indicator_count,
+    latest_indicator_coverage_ratio,
+    latest_missing_country_sum,
+    latest_expected_country_sum,
+    latest_country_coverage_ratio,
     latest_gap_indicator_codes,
     missing_country_indicator_count,
-    affected_country_count,
-    affected_indicator_count,
-    fetch_scope_gap_count,
-    normalization_gap_count,
-    qa_blocking_gap_count,
-    publication_gap_count,
     dominant_gap_stage,
     dominant_gap_status,
     affected_country_iso_alpha_3_codes,
     affected_indicator_codes
-FROM mart.mart_phase2_dataset_operator_panel
-ORDER BY
-    CASE operator_panel_status
-        WHEN 'failing_active_gap' THEN 0
-        WHEN 'warning_coverage_gap' THEN 1
-        ELSE 2
-    END,
-    dataset_code
+FROM mart.vw_phase2_dataset_operator_panel_scan
+ORDER BY operator_attention_rank, dataset_code
 LIMIT 12;
 
 SELECT
     dataset_code,
     source_batch_key,
-    batch_external_id,
-    fetched_at,
-    source_released_at,
+    batch_recency_rank,
+    is_latest_batch_for_dataset,
     batch_status,
-    pair_coverage_trend_vs_prior_batch,
-    phase2_version_row_count,
+    batch_status_rank,
+    source_released_at,
+    fetched_at,
+    published_at,
+    publish_status,
+    publish_blocking_qa_event_count,
     phase2_indicator_count,
     expected_phase2_indicator_count,
+    indicator_coverage_ratio,
     phase2_country_indicator_pair_count,
     expected_phase2_country_indicator_pair_count,
-    phase2_version_row_count_change_vs_prior_batch,
+    country_indicator_pair_coverage_ratio,
     phase2_country_indicator_pair_count_change_vs_prior_batch,
-    publish_status,
-    publish_total_dq_event_count,
-    publish_blocking_qa_event_count,
-    published_at,
-    batch_recency_rank,
-    is_latest_batch_for_dataset
-FROM mart.mart_phase2_dataset_status_history
+    pair_coverage_trend_vs_prior_batch,
+    latest_phase2_observation_year_in_batch
+FROM mart.vw_phase2_dataset_status_history_scan
 ORDER BY dataset_code, batch_recency_rank
 LIMIT 24;
 
