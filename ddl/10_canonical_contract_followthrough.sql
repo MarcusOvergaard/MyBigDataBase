@@ -332,3 +332,6 @@ BEGIN
     END IF;
 END;
 $$;
+
+-- Recreate the shared Phase 2 status-history views after widening audit.pipeline_run.status_code; \ir anchors the path to this script.
+\ir fragments/phase2_dataset_status_history_views.sql
