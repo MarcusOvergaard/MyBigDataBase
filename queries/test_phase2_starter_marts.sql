@@ -85,6 +85,14 @@ DECLARE
     phase2_dependency_invalid_status_count INT;
     phase2_dependency_invalid_fallback_count INT;
     phase2_dependency_china_lfpr_mismatch_count INT;
+    phase2_ingestion_gap_row_count INT;
+    phase2_ingestion_gap_expected_row_count INT;
+    phase2_ingestion_gap_duplicate_row_count INT;
+    phase2_ingestion_gap_invalid_stage_count INT;
+    phase2_ingestion_gap_invalid_status_count INT;
+    phase2_ingestion_gap_invalid_count_arithmetic_count INT;
+    phase2_ingestion_gap_unexpected_published_count INT;
+    phase2_ingestion_gap_china_lfpr_mismatch_count INT;
     macro_plus_external_row_count INT;
     employment_populated_count INT;
     labor_force_participation_populated_count INT;
@@ -1068,6 +1076,105 @@ BEGIN
     END IF;
 
     SELECT COUNT(*)
+    INTO phase2_ingestion_gap_row_count
+    FROM mart.mart_country_phase2_ingestion_gap_explainer;
+
+    SELECT COUNT(*)
+    INTO phase2_ingestion_gap_expected_row_count
+    FROM mart.mart_country_phase2_dependency_explainer
+    WHERE NOT is_indicator_present;
+
+    IF phase2_ingestion_gap_row_count <> phase2_ingestion_gap_expected_row_count THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_ingestion_gap_explainer row count % did not match the dependency-explainer missing-row count %', phase2_ingestion_gap_row_count, phase2_ingestion_gap_expected_row_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_ingestion_gap_duplicate_row_count
+    FROM (
+        SELECT country_key, indicator_key, COUNT(*) AS row_count
+        FROM mart.mart_country_phase2_ingestion_gap_explainer
+        GROUP BY country_key, indicator_key
+        HAVING COUNT(*) <> 1
+    ) duplicate_rows;
+
+    IF phase2_ingestion_gap_duplicate_row_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_ingestion_gap_explainer has % duplicated country-indicator key(s)', phase2_ingestion_gap_duplicate_row_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_ingestion_gap_invalid_stage_count
+    FROM mart.mart_country_phase2_ingestion_gap_explainer
+    WHERE gap_stage NOT IN ('fetch_scope', 'normalization', 'qa_blocking', 'publication');
+
+    IF phase2_ingestion_gap_invalid_stage_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_ingestion_gap_explainer has % row(s) with invalid gap_stage values', phase2_ingestion_gap_invalid_stage_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_ingestion_gap_invalid_status_count
+    FROM mart.mart_country_phase2_ingestion_gap_explainer
+    WHERE gap_status NOT IN (
+        'no_expected_dataset_batch_history',
+        'missing_snapshot_evidence_for_latest_batch',
+        'country_not_present_in_latest_raw_landing',
+        'indicator_not_present_for_country_in_latest_raw_landing',
+        'raw_landed_but_not_normalized_to_staging',
+        'blocked_by_publish_qa',
+        'staged_but_not_versioned',
+        'publish_run_not_successful',
+        'versioned_but_not_visible_in_published_surface',
+        'gap_resolved_elsewhere'
+    );
+
+    IF phase2_ingestion_gap_invalid_status_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_ingestion_gap_explainer has % row(s) with invalid gap_status values', phase2_ingestion_gap_invalid_status_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_ingestion_gap_invalid_count_arithmetic_count
+    FROM mart.mart_country_phase2_ingestion_gap_explainer
+    WHERE latest_expected_batch_country_indicator_raw_row_count > latest_expected_batch_country_raw_row_count
+       OR latest_expected_batch_country_raw_row_count > latest_expected_batch_raw_row_count
+       OR latest_expected_batch_country_indicator_staging_row_count > latest_expected_batch_country_staging_row_count
+       OR latest_expected_batch_country_staging_row_count > latest_expected_batch_staging_row_count
+       OR latest_expected_batch_country_indicator_version_row_count > latest_expected_batch_version_row_count
+       OR latest_expected_batch_country_indicator_blocking_qa_event_count > latest_expected_batch_country_indicator_dq_event_count;
+
+    IF phase2_ingestion_gap_invalid_count_arithmetic_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_ingestion_gap_explainer has % row(s) with inconsistent count arithmetic', phase2_ingestion_gap_invalid_count_arithmetic_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_ingestion_gap_unexpected_published_count
+    FROM mart.mart_country_phase2_ingestion_gap_explainer
+    WHERE current_expected_dataset_country_indicator_published_row_count <> 0;
+
+    IF phase2_ingestion_gap_unexpected_published_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_ingestion_gap_explainer has % row(s) that still show published expected-dataset rows despite being unresolved gaps', phase2_ingestion_gap_unexpected_published_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_ingestion_gap_china_lfpr_mismatch_count
+    FROM mart.mart_country_phase2_ingestion_gap_explainer
+    WHERE iso_alpha_3 = 'CHN'
+      AND indicator_code = 'LABOR_FORCE_PARTICIPATION_RATE_PCT'
+      AND NOT (
+            expected_dataset_code = 'ILOSTAT'
+        AND latest_expected_manifest_path IS NOT NULL
+        AND latest_expected_snapshot_count > 0
+        AND latest_expected_batch_country_indicator_raw_row_count = 0
+        AND latest_expected_batch_country_indicator_staging_row_count = 0
+        AND latest_expected_batch_country_raw_row_count > 0
+        AND latest_expected_batch_country_indicator_blocking_qa_event_count = 0
+        AND gap_stage = 'fetch_scope'
+        AND gap_status = 'indicator_not_present_for_country_in_latest_raw_landing'
+      );
+
+    IF phase2_ingestion_gap_china_lfpr_mismatch_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_ingestion_gap_explainer lost the seeded CHN labor-force-participation fetch-scope proof';
+    END IF;
+
+    SELECT COUNT(*)
     INTO macro_plus_external_row_count
     FROM mart.mart_country_macro_plus_external_latest;
 
@@ -1262,6 +1369,21 @@ LIMIT 12;
 
 SELECT
     iso_alpha_3,
+    indicator_code,
+    expected_dataset_code,
+    latest_expected_batch_external_id,
+    latest_expected_manifest_path,
+    latest_expected_batch_country_indicator_raw_row_count,
+    latest_expected_batch_country_indicator_staging_row_count,
+    latest_expected_batch_country_indicator_blocking_qa_event_count,
+    gap_stage,
+    gap_status
+FROM mart.mart_country_phase2_ingestion_gap_explainer
+ORDER BY iso_alpha_3, indicator_code
+LIMIT 12;
+
+SELECT
+    iso_alpha_3,
     country_name,
     phase2_indicator_coverage_count,
     phase2_indicator_gap_count,
@@ -1317,6 +1439,27 @@ SELECT
     available_fallback_dataset_codes_for_country,
     dependency_status
 FROM mart.mart_country_phase2_dependency_explainer
+ORDER BY iso_alpha_3, indicator_code
+LIMIT 24;
+
+SELECT
+    iso_alpha_3,
+    indicator_code,
+    expected_dataset_code,
+    latest_expected_batch_external_id,
+    latest_expected_batch_loader,
+    latest_expected_manifest_path,
+    latest_expected_snapshot_count,
+    latest_expected_batch_raw_row_count,
+    latest_expected_batch_country_raw_row_count,
+    latest_expected_batch_country_indicator_raw_row_count,
+    latest_expected_batch_country_indicator_staging_row_count,
+    latest_expected_batch_country_indicator_version_row_count,
+    latest_expected_batch_country_indicator_blocking_qa_event_count,
+    latest_expected_publish_status,
+    gap_stage,
+    gap_status
+FROM mart.mart_country_phase2_ingestion_gap_explainer
 ORDER BY iso_alpha_3, indicator_code
 LIMIT 24;
 

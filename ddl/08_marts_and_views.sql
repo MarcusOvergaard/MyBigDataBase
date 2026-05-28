@@ -2,6 +2,7 @@
 -- These analyst-facing surfaces build from the new published/audit contract rather than the legacy dw path.
 
 DROP VIEW IF EXISTS mart.country_latest_macro;
+DROP VIEW IF EXISTS mart.mart_country_phase2_ingestion_gap_explainer CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_phase2_dependency_explainer CASCADE;
 DROP VIEW IF EXISTS mart.mart_phase2_dataset_coverage_trend CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_phase2_issues CASCADE;
@@ -2423,3 +2424,393 @@ LEFT JOIN configured_fallback_datasets cfd
 LEFT JOIN country_fallback_history cfh
   ON cfh.country_key = db.country_key
  AND cfh.indicator_key = db.indicator_key;
+
+CREATE OR REPLACE VIEW mart.mart_country_phase2_ingestion_gap_explainer AS
+WITH missing_dependencies AS (
+    SELECT
+        de.country_key,
+        de.iso_alpha_3,
+        de.country_name,
+        de.region_name,
+        de.income_group,
+        de.country_issue_severity,
+        de.phase2_indicator_coverage_count,
+        de.phase2_indicator_gap_count,
+        de.phase2_coverage_status,
+        de.indicator_key,
+        de.indicator_code,
+        de.indicator_name,
+        de.diagnosis_year,
+        de.expected_source_dataset_key,
+        de.expected_dataset_code,
+        de.expected_dataset_name,
+        de.expected_source_code,
+        de.expected_source_name,
+        de.expected_priority_rank,
+        de.expected_is_override,
+        de.expected_selection_rationale,
+        de.expected_dataset_latest_observation_year,
+        de.expected_dataset_covered_country_count,
+        de.expected_dataset_expected_country_count,
+        de.expected_dataset_missing_country_count,
+        de.expected_dataset_coverage_ratio,
+        de.expected_dataset_coverage_status,
+        de.expected_dataset_missing_country_iso_alpha_3_codes,
+        de.dependency_status,
+        de.latest_published_at
+    FROM mart.mart_country_phase2_dependency_explainer de
+    WHERE de.is_indicator_present = FALSE
+),
+latest_expected_batch AS (
+    SELECT DISTINCT ON (sb.source_dataset_key)
+        sb.source_dataset_key,
+        sb.source_batch_key,
+        sb.batch_external_id,
+        sb.request_uri,
+        sb.request_params_json,
+        sb.fetched_at,
+        sb.source_released_at,
+        sb.ingest_status,
+        sb.row_count_reported,
+        sb.created_at
+    FROM raw.source_batch sb
+    ORDER BY sb.source_dataset_key,
+             COALESCE(sb.source_released_at, sb.fetched_at) DESC,
+             sb.source_batch_key DESC
+),
+snapshot_stats AS (
+    SELECT
+        ss.source_batch_key,
+        COUNT(*) AS snapshot_count,
+        COUNT(*) FILTER (WHERE COALESCE(ss.http_status_code, 200) >= 400) AS failed_snapshot_count,
+        MIN(ss.fetched_at) AS first_snapshot_fetched_at,
+        MAX(ss.fetched_at) AS latest_snapshot_fetched_at
+    FROM raw.source_snapshot ss
+    GROUP BY ss.source_batch_key
+),
+raw_indicator_lookup AS (
+    SELECT
+        rs.source_dataset_key,
+        rs.series_code AS raw_indicator_code,
+        issm.indicator_key
+    FROM ref.source_series rs
+    JOIN ref.indicator_source_series_map issm
+      ON issm.source_series_key = rs.source_series_key
+    WHERE rs.is_active = TRUE
+      AND issm.is_active = TRUE
+
+    UNION
+
+    SELECT
+        rs.source_dataset_key,
+        rsa.alias_code AS raw_indicator_code,
+        issm.indicator_key
+    FROM ref.source_series rs
+    JOIN ref.source_series_alias rsa
+      ON rsa.source_series_key = rs.source_series_key
+    JOIN ref.indicator_source_series_map issm
+      ON issm.source_series_key = rs.source_series_key
+    WHERE rs.is_active = TRUE
+      AND rsa.is_active = TRUE
+      AND issm.is_active = TRUE
+),
+raw_union AS (
+    SELECT source_batch_key, country_code_raw, indicator_code_raw, year_raw
+    FROM raw.wdi_country_indicator_annual
+
+    UNION ALL
+
+    SELECT source_batch_key, country_code_raw, indicator_code_raw, year_raw
+    FROM raw.ifs_country_indicator_annual
+
+    UNION ALL
+
+    SELECT source_batch_key, country_code_raw, indicator_code_raw, year_raw
+    FROM raw.weo_country_indicator_annual
+
+    UNION ALL
+
+    SELECT source_batch_key, country_code_raw, indicator_code_raw, year_raw
+    FROM raw.ilostat_country_indicator_annual
+
+    UNION ALL
+
+    SELECT source_batch_key, country_code_raw, indicator_code_raw, year_raw
+    FROM raw.un_comtrade_country_indicator_annual
+),
+raw_enriched AS (
+    SELECT DISTINCT
+        ru.source_batch_key,
+        c.country_key,
+        ril.indicator_key,
+        NULLIF(ru.year_raw, '')::INT AS observation_year
+    FROM raw_union ru
+    JOIN raw.source_batch sb ON sb.source_batch_key = ru.source_batch_key
+    LEFT JOIN ref.country c ON c.iso_alpha_3 = ru.country_code_raw
+    LEFT JOIN raw_indicator_lookup ril
+      ON ril.source_dataset_key = sb.source_dataset_key
+     AND ril.raw_indicator_code = ru.indicator_code_raw
+    WHERE NULLIF(ru.year_raw, '') ~ '^[0-9]{4}$'
+),
+raw_batch_counts AS (
+    SELECT
+        re.source_batch_key,
+        COUNT(*) AS raw_row_count
+    FROM raw_enriched re
+    GROUP BY re.source_batch_key
+),
+raw_batch_country_counts AS (
+    SELECT
+        re.source_batch_key,
+        re.country_key,
+        COUNT(*) AS raw_row_count
+    FROM raw_enriched re
+    WHERE re.country_key IS NOT NULL
+    GROUP BY re.source_batch_key, re.country_key
+),
+raw_batch_country_indicator_counts AS (
+    SELECT
+        re.source_batch_key,
+        re.country_key,
+        re.indicator_key,
+        COUNT(*) AS raw_row_count,
+        ARRAY_AGG(DISTINCT re.observation_year ORDER BY re.observation_year) AS raw_observation_years
+    FROM raw_enriched re
+    WHERE re.country_key IS NOT NULL
+      AND re.indicator_key IS NOT NULL
+    GROUP BY re.source_batch_key, re.country_key, re.indicator_key
+),
+staging_batch_counts AS (
+    SELECT
+        s.source_batch_key,
+        COUNT(*) AS staging_row_count
+    FROM staging.country_observation_annual s
+    GROUP BY s.source_batch_key
+),
+staging_batch_country_counts AS (
+    SELECT
+        s.source_batch_key,
+        s.country_key,
+        COUNT(*) AS staging_row_count
+    FROM staging.country_observation_annual s
+    WHERE s.country_key IS NOT NULL
+    GROUP BY s.source_batch_key, s.country_key
+),
+staging_batch_country_indicator_counts AS (
+    SELECT
+        s.source_batch_key,
+        s.country_key,
+        s.indicator_key,
+        COUNT(*) AS staging_row_count,
+        ARRAY_AGG(DISTINCT s.observation_year ORDER BY s.observation_year) AS staging_observation_years
+    FROM staging.country_observation_annual s
+    WHERE s.country_key IS NOT NULL
+      AND s.indicator_key IS NOT NULL
+    GROUP BY s.source_batch_key, s.country_key, s.indicator_key
+),
+version_batch_counts AS (
+    SELECT
+        fv.source_batch_key,
+        COUNT(*) AS version_row_count
+    FROM core.fact_country_indicator_version fv
+    GROUP BY fv.source_batch_key
+),
+version_batch_country_indicator_counts AS (
+    SELECT
+        fv.source_batch_key,
+        fv.country_key,
+        fv.indicator_key,
+        COUNT(*) AS version_row_count,
+        ARRAY_AGG(DISTINCT fv.observation_year ORDER BY fv.observation_year) AS version_observation_years
+    FROM core.fact_country_indicator_version fv
+    GROUP BY fv.source_batch_key, fv.country_key, fv.indicator_key
+),
+latest_publish_run_by_batch AS (
+    SELECT DISTINCT ON (apr.source_batch_key)
+        apr.source_batch_key,
+        apr.pipeline_run_key,
+        apr.started_at,
+        apr.completed_at,
+        apr.status_code,
+        apr.row_count_in,
+        apr.row_count_out,
+        apr.notes
+    FROM audit.pipeline_run apr
+    WHERE apr.pipeline_stage = 'publish'
+      AND apr.source_batch_key IS NOT NULL
+    ORDER BY apr.source_batch_key, apr.started_at DESC, apr.pipeline_run_key DESC
+),
+batch_country_indicator_dq_counts AS (
+    SELECT
+        dqe.source_batch_key,
+        dqe.country_key,
+        dqe.indicator_key,
+        COUNT(*) AS dq_event_count,
+        COUNT(*) FILTER (WHERE dqe.blocks_publication = TRUE) AS blocking_qa_event_count,
+        COUNT(*) FILTER (WHERE dqe.severity = 'warning') AS warning_qa_event_count,
+        COUNT(*) FILTER (WHERE dqe.severity = 'error') AS error_qa_event_count
+    FROM audit.data_quality_event dqe
+    WHERE dqe.source_batch_key IS NOT NULL
+      AND dqe.country_key IS NOT NULL
+      AND dqe.indicator_key IS NOT NULL
+    GROUP BY dqe.source_batch_key, dqe.country_key, dqe.indicator_key
+),
+current_expected_dataset_published_counts AS (
+    SELECT
+        fp.source_dataset_key,
+        fp.country_key,
+        fp.indicator_key,
+        COUNT(*) AS current_published_row_count,
+        MAX(fp.observation_year) AS latest_published_observation_year
+    FROM core.fact_country_indicator_published fp
+    GROUP BY fp.source_dataset_key, fp.country_key, fp.indicator_key
+)
+SELECT
+    md.country_key,
+    md.iso_alpha_3,
+    md.country_name,
+    md.region_name,
+    md.income_group,
+    md.country_issue_severity,
+    md.phase2_indicator_coverage_count,
+    md.phase2_indicator_gap_count,
+    md.phase2_coverage_status,
+    md.indicator_key,
+    md.indicator_code,
+    md.indicator_name,
+    md.diagnosis_year,
+    md.expected_source_dataset_key,
+    md.expected_dataset_code,
+    md.expected_dataset_name,
+    md.expected_source_code,
+    md.expected_source_name,
+    md.expected_priority_rank,
+    md.expected_is_override,
+    md.expected_selection_rationale,
+    md.dependency_status,
+    md.expected_dataset_latest_observation_year,
+    md.expected_dataset_covered_country_count,
+    md.expected_dataset_expected_country_count,
+    md.expected_dataset_missing_country_count,
+    md.expected_dataset_coverage_ratio,
+    md.expected_dataset_coverage_status,
+    md.expected_dataset_missing_country_iso_alpha_3_codes,
+    leb.source_batch_key AS latest_expected_source_batch_key,
+    leb.batch_external_id AS latest_expected_batch_external_id,
+    leb.request_uri AS latest_expected_batch_request_uri,
+    leb.fetched_at AS latest_expected_batch_fetched_at,
+    leb.source_released_at AS latest_expected_batch_source_released_at,
+    leb.ingest_status AS latest_expected_batch_ingest_status,
+    leb.row_count_reported AS latest_expected_batch_row_count_reported,
+    leb.request_params_json ->> 'loader' AS latest_expected_batch_loader,
+    leb.request_params_json ->> 'snapshot_root' AS latest_expected_snapshot_root,
+    CASE
+        WHEN leb.source_batch_key IS NULL THEN NULL
+        WHEN leb.request_params_json ->> 'snapshot_root' IS NULL THEN NULL
+        WHEN leb.request_params_json ->> 'loader' = 'scripts/load_wdi_live.sh' THEN NULL
+        ELSE (leb.request_params_json ->> 'snapshot_root') || '/' || regexp_replace(leb.batch_external_id, '^.*_live_', '') || '_manifest.json'
+    END AS latest_expected_manifest_path,
+    COALESCE(ss.snapshot_count, 0) AS latest_expected_snapshot_count,
+    COALESCE(ss.failed_snapshot_count, 0) AS latest_expected_failed_snapshot_count,
+    ss.first_snapshot_fetched_at AS latest_expected_first_snapshot_fetched_at,
+    ss.latest_snapshot_fetched_at AS latest_expected_last_snapshot_fetched_at,
+    COALESCE(rbc.raw_row_count, 0) AS latest_expected_batch_raw_row_count,
+    COALESCE(sbc.staging_row_count, 0) AS latest_expected_batch_staging_row_count,
+    COALESCE(vbc.version_row_count, 0) AS latest_expected_batch_version_row_count,
+    lpr.pipeline_run_key AS latest_expected_publish_run_key,
+    lpr.started_at AS latest_expected_publish_started_at,
+    lpr.completed_at AS latest_expected_publish_completed_at,
+    lpr.status_code AS latest_expected_publish_status,
+    lpr.row_count_in AS latest_expected_publish_row_count_in,
+    lpr.row_count_out AS latest_expected_publish_row_count_out,
+    lpr.notes AS latest_expected_publish_notes,
+    COALESCE(rbcc.raw_row_count, 0) AS latest_expected_batch_country_raw_row_count,
+    COALESCE(rbci.raw_row_count, 0) AS latest_expected_batch_country_indicator_raw_row_count,
+    rbci.raw_observation_years AS latest_expected_batch_country_indicator_raw_observation_years,
+    COALESCE(sbcc.staging_row_count, 0) AS latest_expected_batch_country_staging_row_count,
+    COALESCE(sbci.staging_row_count, 0) AS latest_expected_batch_country_indicator_staging_row_count,
+    sbci.staging_observation_years AS latest_expected_batch_country_indicator_staging_observation_years,
+    COALESCE(vbci.version_row_count, 0) AS latest_expected_batch_country_indicator_version_row_count,
+    vbci.version_observation_years AS latest_expected_batch_country_indicator_version_observation_years,
+    COALESCE(dqc.dq_event_count, 0) AS latest_expected_batch_country_indicator_dq_event_count,
+    COALESCE(dqc.blocking_qa_event_count, 0) AS latest_expected_batch_country_indicator_blocking_qa_event_count,
+    COALESCE(dqc.warning_qa_event_count, 0) AS latest_expected_batch_country_indicator_warning_qa_event_count,
+    COALESCE(dqc.error_qa_event_count, 0) AS latest_expected_batch_country_indicator_error_qa_event_count,
+    COALESCE(cepc.current_published_row_count, 0) AS current_expected_dataset_country_indicator_published_row_count,
+    cepc.latest_published_observation_year AS current_expected_dataset_latest_published_observation_year,
+    CASE
+        WHEN leb.source_batch_key IS NULL THEN 'fetch_scope'
+        WHEN COALESCE(dqc.blocking_qa_event_count, 0) > 0 THEN 'qa_blocking'
+        WHEN COALESCE(vbci.version_row_count, 0) > 0 AND COALESCE(cepc.current_published_row_count, 0) = 0 THEN 'publication'
+        WHEN COALESCE(sbci.staging_row_count, 0) > 0 AND COALESCE(vbci.version_row_count, 0) = 0 THEN 'normalization'
+        WHEN COALESCE(rbci.raw_row_count, 0) > 0 AND COALESCE(sbci.staging_row_count, 0) = 0 THEN 'normalization'
+        ELSE 'fetch_scope'
+    END AS gap_stage,
+    CASE
+        WHEN leb.source_batch_key IS NULL THEN 'no_expected_dataset_batch_history'
+        WHEN COALESCE(ss.snapshot_count, 0) = 0 THEN 'missing_snapshot_evidence_for_latest_batch'
+        WHEN COALESCE(rbci.raw_row_count, 0) = 0 AND COALESCE(rbcc.raw_row_count, 0) = 0 THEN 'country_not_present_in_latest_raw_landing'
+        WHEN COALESCE(rbci.raw_row_count, 0) = 0 THEN 'indicator_not_present_for_country_in_latest_raw_landing'
+        WHEN COALESCE(sbci.staging_row_count, 0) = 0 THEN 'raw_landed_but_not_normalized_to_staging'
+        WHEN COALESCE(dqc.blocking_qa_event_count, 0) > 0 THEN 'blocked_by_publish_qa'
+        WHEN COALESCE(vbci.version_row_count, 0) = 0 THEN 'staged_but_not_versioned'
+        WHEN COALESCE(cepc.current_published_row_count, 0) = 0
+         AND COALESCE(lpr.status_code, 'missing') NOT IN ('succeeded', 'succeeded_with_warnings')
+            THEN 'publish_run_not_successful'
+        WHEN COALESCE(cepc.current_published_row_count, 0) = 0 THEN 'versioned_but_not_visible_in_published_surface'
+        ELSE 'gap_resolved_elsewhere'
+    END AS gap_status,
+    CASE
+        WHEN leb.source_batch_key IS NULL THEN 'No source_batch exists yet for the expected dataset.'
+        WHEN COALESCE(ss.snapshot_count, 0) = 0 THEN 'The latest expected batch has no raw.source_snapshot evidence rows.'
+        WHEN COALESCE(rbci.raw_row_count, 0) = 0 AND COALESCE(rbcc.raw_row_count, 0) = 0 THEN 'The latest expected batch never landed this country in raw rows, so the gap begins at fetch scope.'
+        WHEN COALESCE(rbci.raw_row_count, 0) = 0 THEN 'The latest expected batch landed this country, but not this indicator, in raw rows.'
+        WHEN COALESCE(sbci.staging_row_count, 0) = 0 THEN 'Raw rows exist for this country-indicator, but nothing survived into staging.'
+        WHEN COALESCE(dqc.blocking_qa_event_count, 0) > 0 THEN 'Staged rows exist, but blocking QA events prevented publication.'
+        WHEN COALESCE(vbci.version_row_count, 0) = 0 THEN 'Staged rows exist, but no version rows were materialized for publication.'
+        WHEN COALESCE(cepc.current_published_row_count, 0) = 0
+         AND COALESCE(lpr.status_code, 'missing') NOT IN ('succeeded', 'succeeded_with_warnings')
+            THEN 'Version rows exist, but the latest publish run was not successful.'
+        WHEN COALESCE(cepc.current_published_row_count, 0) = 0 THEN 'Version rows exist, but no current published row remains visible for the expected dataset.'
+        ELSE 'The gap no longer appears unresolved in the expected dataset.'
+    END AS gap_summary,
+    md.latest_published_at
+FROM missing_dependencies md
+LEFT JOIN latest_expected_batch leb
+  ON leb.source_dataset_key = md.expected_source_dataset_key
+LEFT JOIN snapshot_stats ss
+  ON ss.source_batch_key = leb.source_batch_key
+LEFT JOIN raw_batch_counts rbc
+  ON rbc.source_batch_key = leb.source_batch_key
+LEFT JOIN staging_batch_counts sbc
+  ON sbc.source_batch_key = leb.source_batch_key
+LEFT JOIN version_batch_counts vbc
+  ON vbc.source_batch_key = leb.source_batch_key
+LEFT JOIN latest_publish_run_by_batch lpr
+  ON lpr.source_batch_key = leb.source_batch_key
+LEFT JOIN raw_batch_country_counts rbcc
+  ON rbcc.source_batch_key = leb.source_batch_key
+ AND rbcc.country_key = md.country_key
+LEFT JOIN raw_batch_country_indicator_counts rbci
+  ON rbci.source_batch_key = leb.source_batch_key
+ AND rbci.country_key = md.country_key
+ AND rbci.indicator_key = md.indicator_key
+LEFT JOIN staging_batch_country_counts sbcc
+  ON sbcc.source_batch_key = leb.source_batch_key
+ AND sbcc.country_key = md.country_key
+LEFT JOIN staging_batch_country_indicator_counts sbci
+  ON sbci.source_batch_key = leb.source_batch_key
+ AND sbci.country_key = md.country_key
+ AND sbci.indicator_key = md.indicator_key
+LEFT JOIN version_batch_country_indicator_counts vbci
+  ON vbci.source_batch_key = leb.source_batch_key
+ AND vbci.country_key = md.country_key
+ AND vbci.indicator_key = md.indicator_key
+LEFT JOIN batch_country_indicator_dq_counts dqc
+  ON dqc.source_batch_key = leb.source_batch_key
+ AND dqc.country_key = md.country_key
+ AND dqc.indicator_key = md.indicator_key
+LEFT JOIN current_expected_dataset_published_counts cepc
+  ON cepc.source_dataset_key = md.expected_source_dataset_key
+ AND cepc.country_key = md.country_key
+ AND cepc.indicator_key = md.indicator_key;
