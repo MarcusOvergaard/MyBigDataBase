@@ -128,6 +128,18 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
    ```
    This uses `queries/phase2_operator_scan.sql` to print a one-row dataset-status count summary, the ranked per-dataset operator scan, the latest batch row per dataset, and a short list of deteriorating or non-healthy batch-history rows.
 
+18. **Run the compact Phase 2 operator report when you want the scan plus pipeline-alert context in one command**:
+   ```bash
+   make phase2-operator-report
+   ```
+   This wraps `scripts/report_phase2_operator_scan.sh` and prints: the dataset-status summary line, the ranked dataset operator scan, the latest batch row per dataset, and any active `mart.dataset_pipeline_alerts` rows.
+
+19. **Run the silent Phase 2 watchdog when you only want output for real failures**:
+   ```bash
+   make phase2-operator-watchdog
+   ```
+   This wraps `scripts/check_phase2_operator_watchdog.sh` and stays silent when there are no `failing_active_gap` datasets and no active `mart.dataset_pipeline_alerts` rows. It is suitable for higher-frequency cron checks.
+
    If you need the old row-dump surfaces for debugging source arbitration or revision history, run:
    ```bash
    make test-phase2-starter-marts-debug
@@ -188,6 +200,8 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 - `scripts/check_pipeline_alerts.sh`: exits non-zero when `mart.dataset_pipeline_alerts` contains any active alerts, for CI/cron health checks.
 - `queries/test_phase2_starter_marts.sql`: regression checks for the first proper labor mart, the inflation/trade/external-balance Phase 2 marts, the compact Phase 2 readiness/issues/latest snapshots, the dataset-level coverage trend surface, the country-to-dataset dependency explainer surface, the new ingestion-gap explainer surface that attributes missing rows to fetch scope vs normalization vs QA vs publication, the dataset-level ingestion-gap rollup that collapses those breaks by expected source, the per-dataset operator panel that merges freshness plus coverage and active-gap status, the new per-batch dataset-status history mart for deterioration/improvement tracking, and the verbose/deduped conflict diagnostics, with the noisy row dumps now gated behind `PHASE2_VERBOSE=1`.
 - `queries/phase2_operator_scan.sql`: compact operational query entrypoint for the ranked Phase 2 dataset operator scan plus the latest and deteriorating batch-history scan.
+- `scripts/report_phase2_operator_scan.sh`: compact operational report wrapper for the Phase 2 dataset operator scan plus current pipeline alerts, suitable for cron delivery.
+- `scripts/check_phase2_operator_watchdog.sh`: silent-on-healthy watchdog wrapper that emits only when Phase 2 has active failing gaps or pipeline alerts.
 - `scripts/fetch_http_to_snapshot.py`: reusable fetch helper for saving HTTP payloads as local evidence files.
 - `scripts/fetch_uncomtrade_snapshot.py`: UN Comtrade-specific fetch helper that handles CSRF + POST query semantics and persists raw response snapshots.
 - `queries/`: SQL scripts for analysis.
