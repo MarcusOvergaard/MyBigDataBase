@@ -2903,3 +2903,102 @@ GROUP BY
     gr.expected_dataset_name,
     gr.expected_source_code,
     gr.expected_source_name;
+
+CREATE OR REPLACE VIEW mart.mart_phase2_dataset_operator_panel AS
+WITH latest_coverage AS (
+    SELECT
+        dt.source_dataset_key,
+        COUNT(*) AS latest_indicator_count,
+        COUNT(*) FILTER (WHERE dt.coverage_status = 'complete') AS latest_complete_indicator_count,
+        COUNT(*) FILTER (WHERE dt.coverage_status <> 'complete') AS latest_gap_indicator_count,
+        SUM(dt.covered_country_count) AS latest_covered_country_sum,
+        SUM(dt.expected_country_count) AS latest_expected_country_sum,
+        SUM(dt.missing_country_count) AS latest_missing_country_sum,
+        ROUND(AVG(dt.coverage_ratio), 4) AS latest_avg_coverage_ratio,
+        MAX(dt.observation_year) AS latest_phase2_observation_year,
+        MAX(dt.dataset_latest_published_at) AS latest_dataset_published_at,
+        ARRAY_AGG(dt.indicator_code ORDER BY dt.indicator_code)
+            FILTER (WHERE dt.coverage_status <> 'complete') AS latest_gap_indicator_codes
+    FROM mart.mart_phase2_dataset_coverage_trend dt
+    WHERE dt.is_latest_observation_year = TRUE
+    GROUP BY dt.source_dataset_key
+),
+phase2_indicator_catalog AS (
+    SELECT COUNT(*) AS required_phase2_indicator_count
+    FROM core.dim_indicator di
+    WHERE di.indicator_code IN (
+        'EMPLOYMENT_RATE_PCT',
+        'LABOR_FORCE_PARTICIPATION_RATE_PCT',
+        'UNEMPLOYMENT_RATE_PCT',
+        'INFLATION_CPI_PCT',
+        'TRADE_EXPORTS_CURR_USD',
+        'TRADE_IMPORTS_CURR_USD',
+        'CURRENT_ACCOUNT_BALANCE_CURR_USD',
+        'CURRENT_ACCOUNT_BALANCE_PCT_GDP'
+    )
+)
+SELECT
+    q.source_dataset_key,
+    q.dataset_code,
+    q.dataset_name,
+    q.source_code,
+    q.source_name,
+    q.freshness_status,
+    q.is_stale,
+    q.latest_successful_fetch_at,
+    q.latest_source_released_at,
+    q.latest_published_at,
+    q.latest_publish_status,
+    q.latest_publish_total_dq_event_count,
+    q.latest_publish_blocking_qa_event_count,
+    q.current_phase2_published_row_count,
+    q.current_phase2_indicator_count,
+    q.current_conflict_key_count,
+    q.current_conflict_dataset_row_count,
+    q.current_selected_conflict_key_count,
+    q.latest_conflict_observation_year,
+    pic.required_phase2_indicator_count,
+    lc.latest_indicator_count,
+    lc.latest_complete_indicator_count,
+    lc.latest_gap_indicator_count,
+    lc.latest_covered_country_sum,
+    lc.latest_expected_country_sum,
+    lc.latest_missing_country_sum,
+    lc.latest_avg_coverage_ratio,
+    lc.latest_phase2_observation_year,
+    lc.latest_dataset_published_at,
+    COALESCE(lc.latest_gap_indicator_codes, ARRAY[]::text[]) AS latest_gap_indicator_codes,
+    (COALESCE(lc.latest_gap_indicator_count, 0) > 0) AS has_latest_coverage_gap,
+    COALESCE(igr.missing_country_indicator_count, 0) AS missing_country_indicator_count,
+    COALESCE(igr.affected_country_count, 0) AS affected_country_count,
+    COALESCE(igr.affected_indicator_count, 0) AS affected_indicator_count,
+    COALESCE(igr.affected_country_iso_alpha_3_codes, ARRAY[]::varchar[]) AS affected_country_iso_alpha_3_codes,
+    COALESCE(igr.affected_indicator_codes, ARRAY[]::varchar[]) AS affected_indicator_codes,
+    COALESCE(igr.fetch_scope_gap_count, 0) AS fetch_scope_gap_count,
+    COALESCE(igr.normalization_gap_count, 0) AS normalization_gap_count,
+    COALESCE(igr.qa_blocking_gap_count, 0) AS qa_blocking_gap_count,
+    COALESCE(igr.publication_gap_count, 0) AS publication_gap_count,
+    COALESCE(igr.no_expected_dataset_batch_history_count, 0) AS no_expected_dataset_batch_history_count,
+    COALESCE(igr.missing_snapshot_evidence_for_latest_batch_count, 0) AS missing_snapshot_evidence_for_latest_batch_count,
+    COALESCE(igr.country_not_present_in_latest_raw_landing_count, 0) AS country_not_present_in_latest_raw_landing_count,
+    COALESCE(igr.indicator_not_present_for_country_in_latest_raw_landing_count, 0) AS indicator_not_present_for_country_in_latest_raw_landing_count,
+    COALESCE(igr.raw_landed_but_not_normalized_to_staging_count, 0) AS raw_landed_but_not_normalized_to_staging_count,
+    COALESCE(igr.blocked_by_publish_qa_count, 0) AS blocked_by_publish_qa_count,
+    COALESCE(igr.staged_but_not_versioned_count, 0) AS staged_but_not_versioned_count,
+    COALESCE(igr.publish_run_not_successful_count, 0) AS publish_run_not_successful_count,
+    COALESCE(igr.versioned_but_not_visible_in_published_surface_count, 0) AS versioned_but_not_visible_in_published_surface_count,
+    COALESCE(igr.gap_resolved_elsewhere_count, 0) AS gap_resolved_elsewhere_count,
+    igr.dominant_gap_stage,
+    igr.dominant_gap_status,
+    CASE
+        WHEN COALESCE(igr.missing_country_indicator_count, 0) > 0 THEN 'failing_active_gap'
+        WHEN COALESCE(lc.latest_gap_indicator_count, 0) > 0 THEN 'warning_coverage_gap'
+        ELSE 'healthy'
+    END AS operator_panel_status,
+    q.anomaly_flags
+FROM mart.vw_domain_qa_summary_phase2 q
+CROSS JOIN phase2_indicator_catalog pic
+LEFT JOIN mart.mart_phase2_dataset_ingestion_gap_rollup igr
+  ON igr.expected_source_dataset_key = q.source_dataset_key
+LEFT JOIN latest_coverage lc
+  ON lc.source_dataset_key = q.source_dataset_key;

@@ -101,6 +101,13 @@ DECLARE
     phase2_dataset_ingestion_rollup_invalid_stage_arithmetic_count INT;
     phase2_dataset_ingestion_rollup_invalid_status_arithmetic_count INT;
     phase2_dataset_ingestion_rollup_china_lfpr_mismatch_count INT;
+    phase2_dataset_operator_panel_row_count INT;
+    phase2_dataset_operator_panel_expected_row_count INT;
+    phase2_dataset_operator_panel_duplicate_row_count INT;
+    phase2_dataset_operator_panel_invalid_arithmetic_count INT;
+    phase2_dataset_operator_panel_invalid_status_count INT;
+    phase2_dataset_operator_panel_invalid_operator_logic_count INT;
+    phase2_dataset_operator_panel_ilostat_mismatch_count INT;
     macro_plus_external_row_count INT;
     employment_populated_count INT;
     labor_force_participation_populated_count INT;
@@ -1294,6 +1301,101 @@ BEGIN
     END IF;
 
     SELECT COUNT(*)
+    INTO phase2_dataset_operator_panel_row_count
+    FROM mart.mart_phase2_dataset_operator_panel;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_operator_panel_expected_row_count
+    FROM mart.vw_domain_qa_summary_phase2;
+
+    IF phase2_dataset_operator_panel_row_count <> phase2_dataset_operator_panel_expected_row_count THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_operator_panel row count % did not match vw_domain_qa_summary_phase2 row count %', phase2_dataset_operator_panel_row_count, phase2_dataset_operator_panel_expected_row_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_operator_panel_duplicate_row_count
+    FROM (
+        SELECT source_dataset_key, COUNT(*) AS row_count
+        FROM mart.mart_phase2_dataset_operator_panel
+        GROUP BY source_dataset_key
+        HAVING COUNT(*) <> 1
+    ) duplicate_rows;
+
+    IF phase2_dataset_operator_panel_duplicate_row_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_operator_panel has % duplicated source_dataset_key row(s)', phase2_dataset_operator_panel_duplicate_row_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_operator_panel_invalid_arithmetic_count
+    FROM mart.mart_phase2_dataset_operator_panel
+    WHERE latest_indicator_count <> latest_complete_indicator_count + latest_gap_indicator_count
+       OR latest_missing_country_sum <> latest_expected_country_sum - latest_covered_country_sum
+       OR latest_indicator_count <> current_phase2_indicator_count
+       OR has_latest_coverage_gap <> (latest_gap_indicator_count > 0)
+       OR missing_country_indicator_count < affected_country_count
+       OR missing_country_indicator_count < affected_indicator_count
+       OR fetch_scope_gap_count + normalization_gap_count + qa_blocking_gap_count + publication_gap_count <> missing_country_indicator_count;
+
+    IF phase2_dataset_operator_panel_invalid_arithmetic_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_operator_panel has % row(s) with inconsistent coverage/gap arithmetic', phase2_dataset_operator_panel_invalid_arithmetic_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_operator_panel_invalid_status_count
+    FROM mart.mart_phase2_dataset_operator_panel
+    WHERE operator_panel_status NOT IN ('healthy', 'warning_coverage_gap', 'failing_active_gap');
+
+    IF phase2_dataset_operator_panel_invalid_status_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_operator_panel has % row(s) with invalid operator_panel_status values', phase2_dataset_operator_panel_invalid_status_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_operator_panel_invalid_operator_logic_count
+    FROM mart.mart_phase2_dataset_operator_panel
+    WHERE operator_panel_status <>
+        CASE
+            WHEN missing_country_indicator_count > 0 THEN 'failing_active_gap'
+            WHEN latest_gap_indicator_count > 0 THEN 'warning_coverage_gap'
+            ELSE 'healthy'
+        END;
+
+    IF phase2_dataset_operator_panel_invalid_operator_logic_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_operator_panel has % row(s) with inconsistent operator-panel status logic', phase2_dataset_operator_panel_invalid_operator_logic_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_operator_panel_ilostat_mismatch_count
+    FROM mart.mart_phase2_dataset_operator_panel
+    WHERE dataset_code = 'ILOSTAT'
+      AND NOT (
+            current_phase2_indicator_count = 3
+        AND latest_indicator_count = 3
+        AND latest_complete_indicator_count = 0
+        AND latest_gap_indicator_count = 3
+        AND missing_country_indicator_count = 1
+        AND affected_country_count = 1
+        AND affected_indicator_count = 1
+        AND affected_country_iso_alpha_3_codes::text[] = ARRAY['CHN']::text[]
+        AND affected_indicator_codes::text[] = ARRAY['LABOR_FORCE_PARTICIPATION_RATE_PCT']::text[]
+        AND fetch_scope_gap_count = 1
+        AND normalization_gap_count = 0
+        AND qa_blocking_gap_count = 0
+        AND publication_gap_count = 0
+        AND dominant_gap_stage = 'fetch_scope'
+        AND dominant_gap_status = 'indicator_not_present_for_country_in_latest_raw_landing'
+        AND operator_panel_status = 'failing_active_gap'
+        AND latest_gap_indicator_codes::text[] = ARRAY[
+            'EMPLOYMENT_RATE_PCT',
+            'LABOR_FORCE_PARTICIPATION_RATE_PCT',
+            'UNEMPLOYMENT_RATE_PCT'
+        ]::text[]
+      );
+
+    IF phase2_dataset_operator_panel_ilostat_mismatch_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_operator_panel lost the seeded ILOSTAT operator-panel proof';
+    END IF;
+
+    SELECT COUNT(*)
     INTO macro_plus_external_row_count
     FROM mart.mart_country_macro_plus_external_latest;
 
@@ -1519,6 +1621,29 @@ ORDER BY missing_country_indicator_count DESC, expected_dataset_code
 LIMIT 12;
 
 SELECT
+    dataset_code,
+    operator_panel_status,
+    freshness_status,
+    latest_publish_status,
+    current_phase2_indicator_count,
+    latest_gap_indicator_count,
+    missing_country_indicator_count,
+    dominant_gap_stage,
+    dominant_gap_status,
+    latest_gap_indicator_codes,
+    affected_country_iso_alpha_3_codes,
+    affected_indicator_codes
+FROM mart.mart_phase2_dataset_operator_panel
+ORDER BY
+    CASE operator_panel_status
+        WHEN 'failing_active_gap' THEN 0
+        WHEN 'warning_coverage_gap' THEN 1
+        ELSE 2
+    END,
+    dataset_code
+LIMIT 12;
+
+SELECT
     iso_alpha_3,
     country_name,
     phase2_indicator_coverage_count,
@@ -1625,6 +1750,43 @@ SELECT
     latest_expected_publish_status
 FROM mart.mart_phase2_dataset_ingestion_gap_rollup
 ORDER BY missing_country_indicator_count DESC, expected_dataset_code
+LIMIT 12;
+
+SELECT
+    dataset_code,
+    operator_panel_status,
+    freshness_status,
+    latest_publish_status,
+    current_phase2_indicator_count,
+    required_phase2_indicator_count,
+    latest_indicator_count,
+    latest_complete_indicator_count,
+    latest_gap_indicator_count,
+    latest_covered_country_sum,
+    latest_expected_country_sum,
+    latest_missing_country_sum,
+    latest_avg_coverage_ratio,
+    latest_phase2_observation_year,
+    latest_gap_indicator_codes,
+    missing_country_indicator_count,
+    affected_country_count,
+    affected_indicator_count,
+    fetch_scope_gap_count,
+    normalization_gap_count,
+    qa_blocking_gap_count,
+    publication_gap_count,
+    dominant_gap_stage,
+    dominant_gap_status,
+    affected_country_iso_alpha_3_codes,
+    affected_indicator_codes
+FROM mart.mart_phase2_dataset_operator_panel
+ORDER BY
+    CASE operator_panel_status
+        WHEN 'failing_active_gap' THEN 0
+        WHEN 'warning_coverage_gap' THEN 1
+        ELSE 2
+    END,
+    dataset_code
 LIMIT 12;
 
 SELECT
