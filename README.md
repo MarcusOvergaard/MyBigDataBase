@@ -140,6 +140,18 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
    ```
    This wraps `scripts/check_phase2_operator_watchdog.sh` and stays silent when there are no `failing_active_gap` datasets and no active `mart.dataset_pipeline_alerts` rows. It is suitable for higher-frequency cron checks.
 
+20. **Run the offline smoke test for the compact Phase 2 monitoring wrappers when you want to prove the command wiring still behaves correctly without depending on live database state**:
+   ```bash
+   make test-phase2-monitoring-offline
+   ```
+   This uses `scripts/test_phase2_monitoring_smoke.sh` with a fixture-backed mock `psql` shim to verify three paths: the compact report output, the silent healthy watchdog path, and the alert-emitting watchdog path.
+
+21. **Run the compact offline Phase 2 regression bundle when you want both the SQL mart checks and the monitoring-wrapper smoke tests in one command**:
+   ```bash
+   make test-phase2-offline
+   ```
+   This chains `make test-phase2-starter-marts-offline` and `make test-phase2-monitoring-offline` so the Phase 2 serving surfaces and the operator-monitoring entrypoints stay covered together.
+
    If you need the old row-dump surfaces for debugging source arbitration or revision history, run:
    ```bash
    make test-phase2-starter-marts-debug
@@ -202,6 +214,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 - `queries/phase2_operator_scan.sql`: compact operational query entrypoint for the ranked Phase 2 dataset operator scan plus the latest and deteriorating batch-history scan.
 - `scripts/report_phase2_operator_scan.sh`: compact operational report wrapper for the Phase 2 dataset operator scan plus current pipeline alerts, suitable for cron delivery.
 - `scripts/check_phase2_operator_watchdog.sh`: silent-on-healthy watchdog wrapper that emits only when Phase 2 has active failing gaps or pipeline alerts.
+- `scripts/test_phase2_monitoring_smoke.sh`: fixture-backed smoke test for the Phase 2 report/watchdog wrappers, including healthy and alert watchdog branches.
 - `scripts/fetch_http_to_snapshot.py`: reusable fetch helper for saving HTTP payloads as local evidence files.
 - `scripts/fetch_uncomtrade_snapshot.py`: UN Comtrade-specific fetch helper that handles CSRF + POST query semantics and persists raw response snapshots.
 - `queries/`: SQL scripts for analysis.
