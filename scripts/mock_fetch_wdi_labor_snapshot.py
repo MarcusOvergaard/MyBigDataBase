@@ -8,9 +8,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent / 'tests' / 'fixtures' / 'live_sources' / 'wdi_labor'
 FIXTURES = {
-    'SL.EMP.TOTL.SP.ZS': ROOT / 'SL_EMP_TOTL_SP_ZS_DEU_2022.json',
-    'SL.TLF.CACT.ZS': ROOT / 'SL_TLF_CACT_ZS_DEU_2022.json',
-    'SL.UEM.TOTL.ZS': ROOT / 'SL_UEM_TOTL_ZS_DEU_2022.json',
+    'SL.EMP.TOTL.SP.ZS': ROOT / 'SL_EMP_TOTL_SP_ZS_DEU_CHN_2019_2023.json',
+    'SL.TLF.CACT.ZS': ROOT / 'SL_TLF_CACT_ZS_DEU_CHN_2019_2023.json',
+    'SL.UEM.TOTL.ZS': ROOT / 'SL_UEM_TOTL_ZS_DEU_CHN_2019_2023.json',
 }
 
 

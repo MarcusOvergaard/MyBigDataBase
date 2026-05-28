@@ -108,6 +108,12 @@ DECLARE
     phase2_dataset_operator_panel_invalid_status_count INT;
     phase2_dataset_operator_panel_invalid_operator_logic_count INT;
     phase2_dataset_operator_panel_ilostat_mismatch_count INT;
+    phase2_dataset_status_history_row_count INT;
+    phase2_dataset_status_history_expected_row_count INT;
+    phase2_dataset_status_history_latest_row_count INT;
+    phase2_dataset_status_history_duplicate_row_count INT;
+    phase2_dataset_status_history_invalid_status_count INT;
+    phase2_dataset_status_history_invalid_latest_rank_count INT;
     macro_plus_external_row_count INT;
     employment_populated_count INT;
     labor_force_participation_populated_count INT;
@@ -1082,12 +1088,13 @@ BEGIN
       AND NOT (
             expected_dataset_code = 'ILOSTAT'
         AND 'WDI' = ANY(configured_fallback_dataset_codes)
-        AND selected_dataset_code IS NULL
-        AND dependency_status = 'missing_country_from_expected_dataset'
+        AND 'WDI' = ANY(available_fallback_dataset_codes_for_country)
+        AND selected_dataset_code = 'WDI'
+        AND dependency_status = 'covered_by_fallback_dataset'
       );
 
     IF phase2_dependency_china_lfpr_mismatch_count <> 0 THEN
-        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_dependency_explainer lost the seeded CHN labor-force-participation dependency proof';
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_dependency_explainer lost the CHN labor-force-participation fallback proof';
     END IF;
 
     SELECT COUNT(*)
@@ -1172,21 +1179,10 @@ BEGIN
     INTO phase2_ingestion_gap_china_lfpr_mismatch_count
     FROM mart.mart_country_phase2_ingestion_gap_explainer
     WHERE iso_alpha_3 = 'CHN'
-      AND indicator_code = 'LABOR_FORCE_PARTICIPATION_RATE_PCT'
-      AND NOT (
-            expected_dataset_code = 'ILOSTAT'
-        AND latest_expected_manifest_path IS NOT NULL
-        AND latest_expected_snapshot_count > 0
-        AND latest_expected_batch_country_indicator_raw_row_count = 0
-        AND latest_expected_batch_country_indicator_staging_row_count = 0
-        AND latest_expected_batch_country_raw_row_count > 0
-        AND latest_expected_batch_country_indicator_blocking_qa_event_count = 0
-        AND gap_stage = 'fetch_scope'
-        AND gap_status = 'indicator_not_present_for_country_in_latest_raw_landing'
-      );
+      AND indicator_code = 'LABOR_FORCE_PARTICIPATION_RATE_PCT';
 
     IF phase2_ingestion_gap_china_lfpr_mismatch_count <> 0 THEN
-        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_ingestion_gap_explainer lost the seeded CHN labor-force-participation fetch-scope proof';
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_country_phase2_ingestion_gap_explainer still shows the repaired CHN labor-force-participation gap';
     END IF;
 
     SELECT COUNT(*)
@@ -1277,27 +1273,10 @@ BEGIN
     SELECT COUNT(*)
     INTO phase2_dataset_ingestion_rollup_china_lfpr_mismatch_count
     FROM mart.mart_phase2_dataset_ingestion_gap_rollup
-    WHERE expected_dataset_code = 'ILOSTAT'
-      AND NOT (
-            missing_country_indicator_count = 1
-        AND affected_country_count = 1
-        AND affected_indicator_count = 1
-        AND affected_country_iso_alpha_3_codes::text[] = ARRAY['CHN']::text[]
-        AND affected_indicator_codes::text[] = ARRAY['LABOR_FORCE_PARTICIPATION_RATE_PCT']::text[]
-        AND fetch_scope_gap_count = 1
-        AND normalization_gap_count = 0
-        AND qa_blocking_gap_count = 0
-        AND publication_gap_count = 0
-        AND indicator_not_present_for_country_in_latest_raw_landing_count = 1
-        AND dominant_gap_stage = 'fetch_scope'
-        AND dominant_gap_stage_count = 1
-        AND dominant_gap_status = 'indicator_not_present_for_country_in_latest_raw_landing'
-        AND dominant_gap_status_count = 1
-        AND latest_expected_manifest_path IS NOT NULL
-      );
+    WHERE expected_dataset_code = 'ILOSTAT';
 
     IF phase2_dataset_ingestion_rollup_china_lfpr_mismatch_count <> 0 THEN
-        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_ingestion_gap_rollup lost the seeded ILOSTAT fetch-scope proof';
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_ingestion_gap_rollup still shows unresolved ILOSTAT gaps after the CHN labor fallback repair';
     END IF;
 
     SELECT COUNT(*)
@@ -1372,18 +1351,18 @@ BEGIN
         AND latest_indicator_count = 3
         AND latest_complete_indicator_count = 0
         AND latest_gap_indicator_count = 3
-        AND missing_country_indicator_count = 1
-        AND affected_country_count = 1
-        AND affected_indicator_count = 1
-        AND affected_country_iso_alpha_3_codes::text[] = ARRAY['CHN']::text[]
-        AND affected_indicator_codes::text[] = ARRAY['LABOR_FORCE_PARTICIPATION_RATE_PCT']::text[]
-        AND fetch_scope_gap_count = 1
+        AND missing_country_indicator_count = 0
+        AND affected_country_count = 0
+        AND affected_indicator_count = 0
+        AND COALESCE(cardinality(affected_country_iso_alpha_3_codes), 0) = 0
+        AND COALESCE(cardinality(affected_indicator_codes), 0) = 0
+        AND fetch_scope_gap_count = 0
         AND normalization_gap_count = 0
         AND qa_blocking_gap_count = 0
         AND publication_gap_count = 0
-        AND dominant_gap_stage = 'fetch_scope'
-        AND dominant_gap_status = 'indicator_not_present_for_country_in_latest_raw_landing'
-        AND operator_panel_status = 'failing_active_gap'
+        AND dominant_gap_stage IS NULL
+        AND dominant_gap_status IS NULL
+        AND operator_panel_status = 'warning_coverage_gap'
         AND latest_gap_indicator_codes::text[] = ARRAY[
             'EMPLOYMENT_RATE_PCT',
             'LABOR_FORCE_PARTICIPATION_RATE_PCT',
@@ -1392,7 +1371,69 @@ BEGIN
       );
 
     IF phase2_dataset_operator_panel_ilostat_mismatch_count <> 0 THEN
-        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_operator_panel lost the seeded ILOSTAT operator-panel proof';
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_operator_panel lost the repaired ILOSTAT warning-only proof';
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_status_history_row_count
+    FROM mart.mart_phase2_dataset_status_history;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_status_history_expected_row_count
+    FROM raw.source_batch sb
+    JOIN ref.source_dataset sd ON sd.source_dataset_key = sb.source_dataset_key
+    WHERE sd.dataset_code IN ('IFS', 'WEO', 'ILOSTAT', 'UN_COMTRADE_ANNUAL');
+
+    IF phase2_dataset_status_history_row_count <> phase2_dataset_status_history_expected_row_count THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_status_history row count % did not match expected Phase 2 source-batch count %', phase2_dataset_status_history_row_count, phase2_dataset_status_history_expected_row_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_status_history_latest_row_count
+    FROM mart.mart_phase2_dataset_status_history
+    WHERE is_latest_batch_for_dataset;
+
+    IF phase2_dataset_status_history_latest_row_count <> 4 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_status_history expected 4 latest dataset rows, found %', phase2_dataset_status_history_latest_row_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_status_history_duplicate_row_count
+    FROM (
+        SELECT source_dataset_key, source_batch_key, COUNT(*) AS row_count
+        FROM mart.mart_phase2_dataset_status_history
+        GROUP BY source_dataset_key, source_batch_key
+        HAVING COUNT(*) <> 1
+    ) duplicate_rows;
+
+    IF phase2_dataset_status_history_duplicate_row_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_status_history has % duplicated dataset-batch key(s)', phase2_dataset_status_history_duplicate_row_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_status_history_invalid_status_count
+    FROM mart.mart_phase2_dataset_status_history
+    WHERE batch_status NOT IN (
+        'not_published',
+        'publish_failed',
+        'no_phase2_output',
+        'partial_indicator_coverage',
+        'partial_country_coverage',
+        'phase2_output_present'
+    );
+
+    IF phase2_dataset_status_history_invalid_status_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_status_history has % row(s) with invalid batch_status values', phase2_dataset_status_history_invalid_status_count;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO phase2_dataset_status_history_invalid_latest_rank_count
+    FROM mart.mart_phase2_dataset_status_history
+    WHERE is_latest_batch_for_dataset <> (batch_recency_rank = 1)
+       OR batch_recency_rank < 1;
+
+    IF phase2_dataset_status_history_invalid_latest_rank_count <> 0 THEN
+        RAISE EXCEPTION 'Phase 2 mart test failed: mart_phase2_dataset_status_history has % row(s) with inconsistent latest-batch ranking flags', phase2_dataset_status_history_invalid_latest_rank_count;
     END IF;
 
     SELECT COUNT(*)
@@ -1644,6 +1685,24 @@ ORDER BY
 LIMIT 12;
 
 SELECT
+    dataset_code,
+    source_batch_key,
+    batch_external_id,
+    batch_status,
+    pair_coverage_trend_vs_prior_batch,
+    phase2_indicator_count,
+    expected_phase2_indicator_count,
+    phase2_country_indicator_pair_count,
+    expected_phase2_country_indicator_pair_count,
+    phase2_country_indicator_pair_count_change_vs_prior_batch,
+    publish_status,
+    published_at,
+    is_latest_batch_for_dataset
+FROM mart.mart_phase2_dataset_status_history
+ORDER BY dataset_code, batch_recency_rank
+LIMIT 16;
+
+SELECT
     iso_alpha_3,
     country_name,
     phase2_indicator_coverage_count,
@@ -1788,6 +1847,31 @@ ORDER BY
     END,
     dataset_code
 LIMIT 12;
+
+SELECT
+    dataset_code,
+    source_batch_key,
+    batch_external_id,
+    fetched_at,
+    source_released_at,
+    batch_status,
+    pair_coverage_trend_vs_prior_batch,
+    phase2_version_row_count,
+    phase2_indicator_count,
+    expected_phase2_indicator_count,
+    phase2_country_indicator_pair_count,
+    expected_phase2_country_indicator_pair_count,
+    phase2_version_row_count_change_vs_prior_batch,
+    phase2_country_indicator_pair_count_change_vs_prior_batch,
+    publish_status,
+    publish_total_dq_event_count,
+    publish_blocking_qa_event_count,
+    published_at,
+    batch_recency_rank,
+    is_latest_batch_for_dataset
+FROM mart.mart_phase2_dataset_status_history
+ORDER BY dataset_code, batch_recency_rank
+LIMIT 24;
 
 SELECT
     iso_alpha_3,

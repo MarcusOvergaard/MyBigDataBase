@@ -45,11 +45,12 @@ BEGIN
           AND sb.request_params_json -> 'api_indicator_codes' @> '["SL.EMP.TOTL.SP.ZS","SL.TLF.CACT.ZS","SL.UEM.TOTL.ZS"]'::jsonb
           AND sb.request_params_json -> 'source_series_codes' @> '["SL.EMP.TOTL.SP.ZS","SL.TLF.CACT.ZS","SL.UEM.TOTL.ZS"]'::jsonb
           AND sb.request_params_json -> 'conformed_indicator_codes' @> '["EMPLOYMENT_RATE_PCT","LABOR_FORCE_PARTICIPATION_RATE_PCT","UNEMPLOYMENT_RATE_PCT"]'::jsonb
-          AND sb.request_params_json -> 'country_basket' @> '["DEU"]'::jsonb
-          AND sb.request_params_json ->> 'years' = '2022:2022'
+          AND sb.request_params_json -> 'country_basket' @> '["DEU","CHN"]'::jsonb
+          AND sb.request_params_json ->> 'years' = '2019:2023'
+          AND jsonb_array_length(sb.request_params_json -> 'country_basket') = 2
           AND jsonb_array_length(sb.request_params_json -> 'series_requests') = 3
     ) THEN
-        RAISE EXCEPTION 'Live WDI labor contract test failed: latest WDI labor batch does not declare the expected narrow labor overlap lineage';
+        RAISE EXCEPTION 'Live WDI labor contract test failed: latest WDI labor batch does not declare the expected widened labor fallback lineage';
     END IF;
 
     SELECT COUNT(DISTINCT di.indicator_code)
