@@ -54,6 +54,15 @@ BEGIN
 
     IF NOT EXISTS (
         SELECT 1
+        FROM raw.source_batch sb
+        WHERE sb.source_batch_key = latest_batch_key
+          AND sb.request_params_json ->> 'years' = '2019;2020;2021;2022;2023'
+    ) THEN
+        RAISE EXCEPTION 'Live WEO contract test failed: latest live WEO batch does not declare the widened 2019-2023 proof window';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
         FROM core.fact_country_indicator_published fp
         JOIN core.dim_indicator di ON di.indicator_key = fp.indicator_key
         JOIN core.dim_dataset dd ON dd.source_dataset_key = fp.source_dataset_key

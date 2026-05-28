@@ -140,13 +140,19 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
    ```
    This wraps `scripts/check_phase2_operator_watchdog.sh` and stays silent when there are no `failing_active_gap` datasets and no active `mart.dataset_pipeline_alerts` rows. It is suitable for higher-frequency cron checks.
 
-20. **Run the offline smoke test for the compact Phase 2 monitoring wrappers when you want to prove the command wiring still behaves correctly without depending on live database state**:
+20. **Verify the current real-ingestion live state without resetting the database**:
+   ```bash
+   make verify-real-ingestion-live-state
+   ```
+   This runs the human-readable Phase 2 operator report first and then fails non-zero if `mart.dataset_pipeline_alerts` still contains active alerts.
+
+21. **Run the offline smoke test for the compact Phase 2 monitoring wrappers when you want to prove the command wiring still behaves correctly without depending on live database state**:
    ```bash
    make test-phase2-monitoring-offline
    ```
    This uses `scripts/test_phase2_monitoring_smoke.sh` with a fixture-backed mock `psql` shim to verify three paths: the compact report output, the silent healthy watchdog path, and the alert-emitting watchdog path.
 
-21. **Run the compact offline Phase 2 regression bundle when you want both the SQL mart checks and the monitoring-wrapper smoke tests in one command**:
+22. **Run the compact offline Phase 2 regression bundle when you want both the SQL mart checks and the monitoring-wrapper smoke tests in one command**:
    ```bash
    make test-phase2-offline
    ```
@@ -206,7 +212,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 - `scripts/load_wdi_live.sh`: first narrow live WDI loader that now defaults to the canonical seeded country basket from `ref.country`, fetches JSON snapshots, records them in `raw.source_snapshot`, and publishes through the existing Phase 1 contract.
 - `scripts/load_wdi_labor_live.sh`: tiny real WDI labor fallback loader for `DEU` + `CHN` across `2019-2023`, with snapshot evidence, per-run manifest output, and metadata-driven labor-series lineage used both to prove labor source conflicts against ILOSTAT and to cover the repaired `CHN` labor-force-participation fallback path.
 - `scripts/load_ifs_live.sh`: first narrow live IFS loader that now defaults to the canonical seeded country basket from `ref.country`, fetches JSON snapshots plus IMF country metadata, records them in `raw.source_snapshot`, and publishes through the existing Phase 1 contract, including the tiny real GDP-plus-inflation overlap proof used for source-priority diagnostics.
-- `scripts/load_weo_live.sh`: first narrow live WEO loader that defaults to the canonical seeded country basket from `ref.country`, fetches IMF country metadata plus the current-account balance and current-account-percent-of-GDP DataMapper snapshots, records them in `raw.source_snapshot`, and publishes through the same warehouse contract.
+- `scripts/load_weo_live.sh`: first live WEO loader that defaults to the canonical seeded country basket from `ref.country` across the widened 2019-2023 proof window, fetches IMF country metadata plus the current-account balance and current-account-percent-of-GDP DataMapper snapshots, records them in `raw.source_snapshot`, and publishes through the same warehouse contract.
 - `scripts/load_ilostat_live.sh`: first live ILOSTAT loader for annual total unemployment rate, employment-to-population ratio, and labour force participation rate ages 15+, now defaulting to the canonical seeded country basket from `ref.country` across the widened 2019-2023 proof window, recorded as snapshot-backed evidence and published through the same warehouse contract.
 - `scripts/load_un_comtrade_live.sh`: first live UN Comtrade loader for annual total exports/imports against World partner totals, now using targeted reporter-code requests derived from the canonical seeded country basket across the widened 2019-2023 proof window, recorded as snapshot-backed evidence and published through the same warehouse contract.
 - `scripts/check_pipeline_alerts.sh`: exits non-zero when `mart.dataset_pipeline_alerts` contains any active alerts, for CI/cron health checks.
@@ -234,7 +240,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 
 ## Current status vs future goal
 - Current status: the warehouse structure, publication logic, QA surfaces, and analyst views are working locally with sample WDI and IFS files, and the first live WDI backbone, WDI labor overlap, IFS, WEO, ILOSTAT, and UN Comtrade loaders now run end to end.
-- Not done yet: production-grade source coverage across labor, trade, external balance, and other domains; the live specialist-source slices now cover the seeded canonical country basket through a widened 2019-2023 proof window for ILOSTAT and UN Comtrade plus a first narrow WEO current-account slice, and the repo exposes those published results through first-pass Phase 2 starter marts, but they are still deliberately narrow proofs rather than broad production coverage.
+- Not done yet: production-grade source coverage across labor, trade, external balance, and other domains; the live specialist-source slices now cover the seeded canonical country basket through a widened 2019-2023 proof window for ILOSTAT, WEO, and UN Comtrade, and the repo exposes those published results through first-pass Phase 2 starter marts, but they are still deliberately narrow proofs rather than broad production coverage.
 - Intended direction: keep onboarding new sources through the metadata registry first, then widen ILOSTAT, WEO, UN Comtrade, and later sources on top of the existing `raw -> staging -> core -> audit -> mart` path without creating a second ingestion architecture.
 - Non-goal: querying the live web every time an analyst asks for a number. The intended model is still fetch first, store locally, then query the local warehouse.
 

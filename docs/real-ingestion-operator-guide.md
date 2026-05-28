@@ -199,9 +199,10 @@ Why these matter:
 
 Fast path:
 ```bash
-make check-alerts
-make phase2-operator-report
+make verify-real-ingestion-live-state
 ```
+
+This prints the current operator report and then exits non-zero if active pipeline alerts remain.
 
 Stronger path:
 ```bash
@@ -260,6 +261,12 @@ make phase2-operator-watchdog
 make phase2-operator-report
 ```
 - prints dataset summary, ranked operator scan, latest batch rows, and active pipeline alerts
+
+### One-command live-state verification
+```bash
+make verify-real-ingestion-live-state
+```
+- prints the current operator report and then fails if active pipeline alerts are still present
 
 ### After changing monitoring wrappers
 ```bash
