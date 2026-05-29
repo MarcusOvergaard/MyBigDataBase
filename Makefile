@@ -10,7 +10,7 @@ PSQL = $(PSQL_BASE) -d $(DB_NAME)
 export DB_NAME
 export PSQL_CMD = $(PSQL_BASE)
 
-.PHONY: init create-db ddl seed load-sample load-wdi-live load-wdi-labor-live load-ifs-live load-weo-live load-ilostat-live load-un-comtrade-live clean-ifs-stale-snapshots build-mart test check-alerts test-live-wdi-contract test-live-wdi-labor-contract test-live-ifs-contract test-live-weo-contract test-live-ilostat-contract test-live-un-comtrade-contract test-live-contracts test-live-contracts-offline test-phase2-starter-marts-offline test-phase2-starter-marts-debug test-phase2-monitoring-offline test-phase2-offline test-phase3-starter-marts test-real-ingestion-offline verify-real-ingestion-live-state phase2-operator-scan phase2-operator-report phase2-operator-watchdog repeat-load-test all
+.PHONY: init create-db ddl seed load-sample load-wdi-live load-wdi-labor-live load-ifs-live load-weo-live load-ilostat-live load-who-live load-un-comtrade-live clean-ifs-stale-snapshots build-mart test check-alerts test-live-wdi-contract test-live-wdi-labor-contract test-live-ifs-contract test-live-weo-contract test-live-ilostat-contract test-live-who-contract test-live-un-comtrade-contract test-live-contracts test-live-contracts-offline test-phase2-starter-marts-offline test-phase2-starter-marts-debug test-phase2-monitoring-offline test-phase2-offline test-phase3-starter-marts test-phase3-health-authority test-real-ingestion-offline verify-real-ingestion-live-state phase2-operator-scan phase2-operator-report phase2-operator-watchdog repeat-load-test all
 
 all: init
 
@@ -55,6 +55,11 @@ load-weo-live:
 load-ilostat-live:
 	@chmod +x scripts/load_ilostat_live.sh
 	@./scripts/load_ilostat_live.sh
+
+# Load a narrow live WHO health-authority overlap slice through the same warehouse contract
+load-who-live:
+	@chmod +x scripts/load_who_live.sh
+	@./scripts/load_who_live.sh
 
 # Load narrow live UN Comtrade exports/imports slices through the same warehouse contract
 load-un-comtrade-live:
@@ -117,6 +122,12 @@ test-live-ilostat-contract:
 	@chmod +x scripts/test_live_ilostat_labor_contract.sh
 	@./scripts/test_live_ilostat_labor_contract.sh
 
+# Re-run the live WHO health-authority slice and assert lineage/publication fields stay intact
+# Override FETCH_HELPER for offline fixture-backed runs if needed.
+test-live-who-contract:
+	@chmod +x scripts/test_live_who_health_contract.sh
+	@./scripts/test_live_who_health_contract.sh
+
 # Re-run the live UN Comtrade exports/imports slice and assert lineage/publication fields stay intact
 # Override FETCH_HELPER for offline fixture-backed runs if needed.
 test-live-un-comtrade-contract:
@@ -125,7 +136,7 @@ test-live-un-comtrade-contract:
 
 # Re-run all live contract checks in one shot
 # Override FETCH_HELPER for offline fixture-backed runs if needed.
-test-live-contracts: test-live-wdi-contract test-live-wdi-labor-contract test-live-ifs-contract test-live-weo-contract test-live-ilostat-contract test-live-un-comtrade-contract
+test-live-contracts: test-live-wdi-contract test-live-wdi-labor-contract test-live-ifs-contract test-live-weo-contract test-live-ilostat-contract test-live-who-contract test-live-un-comtrade-contract
 
 # Re-run all live contract checks against local fixtures instead of external APIs
 test-live-contracts-offline:
@@ -134,6 +145,7 @@ test-live-contracts-offline:
 	@FETCH_HELPER=scripts/mock_fetch_ifs_snapshot.py ./scripts/test_live_ifs_inflation_contract.sh
 	@FETCH_HELPER=scripts/mock_fetch_weo_snapshot.py ./scripts/test_live_weo_external_balance_contract.sh
 	@FETCH_HELPER=scripts/mock_fetch_ilostat_snapshot.py ./scripts/test_live_ilostat_labor_contract.sh
+	@FETCH_HELPER=scripts/mock_fetch_who_snapshot.py ./scripts/test_live_who_health_contract.sh
 	@FETCH_HELPER=scripts/mock_fetch_uncomtrade_snapshot.py ./scripts/test_live_un_comtrade_contract.sh
 
 # Assert the first analyst-facing Phase 2 labor/trade marts after the offline live-contract suite
@@ -159,9 +171,14 @@ test-phase3-starter-marts:
 	@echo "Running Phase 3 starter mart regression queries..."
 	@$(PSQL) -f queries/test_phase3_starter_marts.sql
 
-# Re-run the full offline real-ingestion proof: bootstrap, fixture-backed live loaders, and Phase 2 regressions
+# Assert the first Phase 3 WHO health-authority overlap diagnostics
+test-phase3-health-authority:
+	@echo "Running Phase 3 health-authority regression queries..."
+	@$(PSQL) -f queries/test_phase3_health_authority.sql
+
+# Re-run the full offline real-ingestion proof: bootstrap, fixture-backed live loaders, and Phase 2/3 regressions
 test-real-ingestion-offline:
-	@$(MAKE) init test-live-contracts-offline test-phase2-offline \
+	@$(MAKE) init test-live-contracts-offline build-mart test-phase2-offline test-phase3-starter-marts test-phase3-health-authority \
 		DB_NAME='$(DB_NAME)' \
 		DB_HOST='$(DB_HOST)' \
 		DB_PORT='$(DB_PORT)' \

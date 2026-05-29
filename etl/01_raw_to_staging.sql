@@ -56,6 +56,15 @@ BEGIN
             r.indicator_code_raw,
             r.year_raw,
             r.value_raw
+        FROM raw.who_country_indicator_annual r
+        UNION ALL
+        SELECT
+            r.source_batch_key,
+            r.raw_row_key,
+            r.country_code_raw,
+            r.indicator_code_raw,
+            r.year_raw,
+            r.value_raw
         FROM raw.un_comtrade_country_indicator_annual r
     ),
     normalized AS (

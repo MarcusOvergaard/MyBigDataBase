@@ -20,6 +20,7 @@ INSERT INTO ref.source_system (source_code, source_name, publisher_type, base_ur
 ('WB', 'World Bank Open Data', 'multilateral', 'https://api.worldbank.org/v2/', 'api', 'Phase 1 annual macro backbone'),
 ('IMF', 'International Monetary Fund', 'multilateral', 'https://www.imf.org/en/Data', 'api', 'Registered early for later macro arbitration posture'),
 ('ILO', 'International Labour Organization', 'multilateral', 'https://rplumber.ilo.org/data/', 'api', 'Registered early for later labor-market ingestion planning; keep inactive until a narrow indicator slice is validated.'),
+('WHO', 'World Health Organization', 'multilateral', 'https://ghoapi.azureedge.net/api/', 'api', 'Registered for the first Phase 3 health-authority overlap slice on life expectancy.'),
 ('UN', 'United Nations', 'multilateral', 'https://comtradeplus.un.org/', 'api', 'Registered early for later trade-ingestion planning; keep inactive until the first merchandise trade slice is modeled.')
 ON CONFLICT (source_code) DO NOTHING;
 
@@ -47,6 +48,7 @@ FROM (
         ('IMF', 'IFS', 'International Financial Statistics', 'A', 'country-period-series', 'periodic', 'https://www.imf.org/en/Data', 'api', 'https://www.imf.org/external/datamapper/api/v1/', 'json', FALSE, 'Public API for the widened 2019-2023 GDP-plus-inflation arbitration proof slice; broader SDMX-style ingestion can come later.', TRUE, TRUE),
         ('IMF', 'WEO', 'World Economic Outlook', 'A', 'country-period-series', 'periodic', 'https://www.imf.org/en/Publications/WEO', 'api', 'https://www.imf.org/external/datamapper/api/v1/', 'json', FALSE, 'First narrow external-balance proof slice for annual current-account fields through IMF DataMapper.', TRUE, TRUE),
         ('ILO', 'ILOSTAT', 'ILOSTAT bulk and API labor statistics catalog', 'A', 'country-year-indicator', 'periodic', 'https://rplumber.ilo.org/data/', 'api', 'https://rplumber.ilo.org/data/', 'json', FALSE, 'First live slice validated for total unemployment rate, employment-to-population ratio, and labour force participation rate ages 15+ across the seeded country basket for 2019-2023; broader labor indicator families still need explicit slice-by-slice modeling.', TRUE, TRUE),
+        ('WHO', 'WHO_GHO', 'WHO Global Health Observatory OData feed', 'A', 'country-year-indicator', 'periodic', 'https://ghoapi.azureedge.net/api/', 'api', 'https://ghoapi.azureedge.net/api/', 'json', FALSE, 'First narrow Phase 3 health-authority overlap slice for life expectancy across a five-country proof basket for 2019-2021.', TRUE, TRUE),
         ('UN', 'UN_COMTRADE_ANNUAL', 'UN Comtrade annual merchandise trade dataset', 'A', 'country-year-indicator', 'periodic', 'https://comtradeplus.un.org/TradeFlow', 'api', 'https://comtradeplus.un.org/api/Trade/', 'json', FALSE, 'First live slice validated for annual total goods exports and imports against World partner totals across 2019-2023; broader partner and product grains still need explicit modeling.', TRUE, TRUE)
 ) AS s(source_code, dataset_code, dataset_name, default_frequency_code, default_grain, release_cadence, access_path, ingest_access_method, ingest_base_endpoint, ingest_default_format, ingest_requires_auth, ingest_cadence_note, is_active_for_ingest, is_active)
 JOIN ref.source_system ss ON ss.source_code = s.source_code
@@ -65,6 +67,7 @@ FROM (
         ('IFS', 'api', 'https://www.imf.org/external/datamapper/api/v1/', 'json', FALSE, 'Public API for the widened 2019-2023 GDP-plus-inflation arbitration proof slice; broader SDMX-style ingestion can come later.', TRUE),
         ('WEO', 'api', 'https://www.imf.org/external/datamapper/api/v1/', 'json', FALSE, 'First narrow external-balance proof slice for annual current-account fields through IMF DataMapper.', TRUE),
         ('ILOSTAT', 'api', 'https://rplumber.ilo.org/data/', 'json', FALSE, 'First live slice validated for total unemployment rate, employment-to-population ratio, and labour force participation rate ages 15+ across the seeded country basket for 2019-2023; broader labor indicator families still need explicit slice-by-slice modeling.', TRUE),
+        ('WHO_GHO', 'api', 'https://ghoapi.azureedge.net/api/', 'json', FALSE, 'First narrow Phase 3 health-authority overlap slice for life expectancy across a five-country proof basket for 2019-2021.', TRUE),
         ('UN_COMTRADE_ANNUAL', 'api', 'https://comtradeplus.un.org/api/Trade/', 'json', FALSE, 'First live slice validated for annual total goods exports and imports against World partner totals across 2019-2023; broader partner and product grains still need explicit modeling.', TRUE),
         ('ISO3166_COUNTRY', 'manual_file', 'reference', 'csv', FALSE, 'Reference-only seed loaded from local curated files when needed.', FALSE)
 ) AS s(dataset_code, ingest_access_method, ingest_base_endpoint, ingest_default_format, ingest_requires_auth, ingest_cadence_note, is_active_for_ingest)
@@ -90,6 +93,7 @@ FROM (
         ('WDI', 'SP.DYN.LE00.IN', 'Life expectancy at birth, total (years)', 'years', 'A', 'First Phase 3 health continuity slice through WDI.', TRUE),
         ('WDI', 'SE.PRM.ENRR', 'School enrollment, primary (% gross)', 'percent', 'A', 'First Phase 3 education continuity slice through WDI.', TRUE),
         ('WDI', 'EG.ELC.ACCS.ZS', 'Access to electricity (% of population)', 'percent', 'A', 'First Phase 3 infrastructure continuity slice through WDI.', TRUE),
+        ('WHO_GHO', 'WHOSIS_000001', 'Life expectancy at birth (years)', 'years', 'A', 'WHO Global Health Observatory life-expectancy authority slice for the first Phase 3 health overlap proof.', TRUE),
         ('WDI', 'SL.EMP.TOTL.SP.ZS', 'Employment to population ratio, ages 15+, total (%)', 'percent', 'A', 'Narrow real overlap slice used to prove labor source-conflict diagnostics against ILOSTAT.', TRUE),
         ('WDI', 'SL.TLF.CACT.ZS', 'Labor force participation rate, ages 15+, total (%)', 'percent', 'A', 'Narrow real overlap slice used to prove labor source-conflict diagnostics against ILOSTAT.', TRUE),
         ('WDI', 'SL.UEM.TOTL.ZS', 'Unemployment, total (% of total labor force)', 'percent', 'A', 'Narrow real overlap slice used to prove labor source-conflict diagnostics against ILOSTAT.', TRUE),
@@ -119,6 +123,7 @@ FROM (
         ('WDI', 'SL.EMP.TOTL.SP.ZS', 'wb_indicator_code', 'SL.EMP.TOTL.SP.ZS', 'World Bank API code for employment to population ratio, ages 15+, total.', TRUE),
         ('WDI', 'SL.TLF.CACT.ZS', 'wb_indicator_code', 'SL.TLF.CACT.ZS', 'World Bank API code for labor force participation rate, ages 15+, total.', TRUE),
         ('WDI', 'SL.UEM.TOTL.ZS', 'wb_indicator_code', 'SL.UEM.TOTL.ZS', 'World Bank API code for total unemployment rate.', TRUE),
+        ('WHO_GHO', 'WHOSIS_000001', 'who_indicator_code', 'WHOSIS_000001', 'WHO GHO OData indicator code for life expectancy at birth.', TRUE),
         ('IFS', 'NGDP_USD', 'imf_datamapper_indicator', 'NGDPD', 'IMF DataMapper API code for Nominal GDP (current US$)', TRUE),
         ('IFS', 'PCPI_PC_PP_PT', 'imf_datamapper_indicator', 'PCPIPCH', 'IMF DataMapper API code for Inflation, average consumer prices (annual %)', TRUE),
         ('WEO', 'CURRENT_ACCOUNT_BALANCE_USD', 'imf_datamapper_indicator', 'BCA', 'IMF DataMapper API code for current account balance in U.S. dollars.', TRUE),
@@ -188,6 +193,7 @@ FROM (
         ('POP_TOTAL', 'WDI', 'SP.POP.TOTL', 'WDI population backbone mapping', TRUE),
         ('FERTILITY_RATE_BIRTHS_PER_WOMAN', 'WDI', 'SP.DYN.TFRT.IN', 'WDI fertility continuity mapping for the first Phase 3 demographic slice', TRUE),
         ('LIFE_EXPECTANCY_YEARS', 'WDI', 'SP.DYN.LE00.IN', 'WDI life-expectancy continuity mapping for the first Phase 3 health slice', TRUE),
+        ('LIFE_EXPECTANCY_YEARS', 'WHO_GHO', 'WHOSIS_000001', 'WHO GHO life-expectancy authority mapping for the first Phase 3 health overlap slice', TRUE),
         ('SCHOOL_ENROLLMENT_PRIMARY_PCT', 'WDI', 'SE.PRM.ENRR', 'WDI primary school enrollment continuity mapping for the first Phase 3 education slice', TRUE),
         ('ACCESS_TO_ELECTRICITY_PCT', 'WDI', 'EG.ELC.ACCS.ZS', 'WDI electricity-access continuity mapping for the first Phase 3 infrastructure slice', TRUE),
         ('EMPLOYMENT_RATE_PCT', 'WDI', 'SL.EMP.TOTL.SP.ZS', 'Narrow real WDI overlap mapping for labor conflict diagnostics.', TRUE),
@@ -242,7 +248,7 @@ WHERE isp.indicator_key = i.indicator_key
       OR (i.indicator_code = 'INFLATION_CPI_PCT' AND d.dataset_code IN ('WDI', 'IFS'))
       OR (i.indicator_code = 'POP_TOTAL' AND d.dataset_code = 'WDI')
       OR (i.indicator_code = 'FERTILITY_RATE_BIRTHS_PER_WOMAN' AND d.dataset_code = 'WDI')
-      OR (i.indicator_code = 'LIFE_EXPECTANCY_YEARS' AND d.dataset_code = 'WDI')
+      OR (i.indicator_code = 'LIFE_EXPECTANCY_YEARS' AND d.dataset_code IN ('WDI', 'WHO_GHO'))
       OR (i.indicator_code = 'SCHOOL_ENROLLMENT_PRIMARY_PCT' AND d.dataset_code = 'WDI')
       OR (i.indicator_code = 'ACCESS_TO_ELECTRICITY_PCT' AND d.dataset_code = 'WDI')
       OR (i.indicator_code = 'EMPLOYMENT_RATE_PCT' AND d.dataset_code IN ('ILOSTAT', 'WDI'))
@@ -277,7 +283,8 @@ FROM (
         ('INFLATION_CPI_PCT', 'WDI', 2, 'WDI remains the broad-coverage fallback inflation series when the minimal IMF IFS sample does not cover a country-year.'),
         ('POP_TOTAL', 'WDI', 1, 'Phase 1 production backbone uses WDI for broad annual country coverage.'),
         ('FERTILITY_RATE_BIRTHS_PER_WOMAN', 'WDI', 1, 'WDI is the initial authority source for the first fertility continuity slice.'),
-        ('LIFE_EXPECTANCY_YEARS', 'WDI', 1, 'WDI is the initial authority source for the first life-expectancy continuity slice.'),
+        ('LIFE_EXPECTANCY_YEARS', 'WHO_GHO', 1, 'WHO GHO is the preferred authority for the first Phase 3 life-expectancy overlap slice.'),
+        ('LIFE_EXPECTANCY_YEARS', 'WDI', 2, 'WDI remains the continuity fallback when the first WHO life-expectancy authority slice does not cover a country-year.'),
         ('SCHOOL_ENROLLMENT_PRIMARY_PCT', 'WDI', 1, 'WDI is the initial authority source for the first education continuity slice.'),
         ('ACCESS_TO_ELECTRICITY_PCT', 'WDI', 1, 'WDI is the initial authority source for the first infrastructure continuity slice.'),
         ('EMPLOYMENT_RATE_PCT', 'ILOSTAT', 1, 'ILOSTAT is the preferred authority for the first employment-to-population labor slice.'),
