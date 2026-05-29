@@ -2,20 +2,19 @@
 import argparse
 import hashlib
 import json
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import unquote
 
-ROOT = Path(__file__).resolve().parent.parent / 'tests' / 'fixtures' / 'live_sources' / 'wdi'
+ROOT = Path(__file__).resolve().parent.parent / 'tests' / 'fixtures' / 'live_sources' / 'who'
 FIXTURES = {
-    'NY.GDP.MKTP.CD': ROOT / '20260529T011517Z_NY_GDP_MKTP_CD.json',
-    'NY.GDP.PCAP.CD': ROOT / '20260529T011517Z_NY_GDP_PCAP_CD.json',
-    'FP.CPI.TOTL.ZG': ROOT / '20260529T011517Z_FP_CPI_TOTL_ZG.json',
-    'SP.POP.TOTL': ROOT / '20260529T011517Z_SP_POP_TOTL.json',
-    'SP.DYN.TFRT.IN': ROOT / '20260529T011517Z_SP_DYN_TFRT_IN.json',
-    'SP.DYN.LE00.IN': ROOT / '20260529T011517Z_SP_DYN_LE00_IN.json',
-    'SE.PRM.ENRR': ROOT / '20260529T011517Z_SE_PRM_ENRR.json',
-    'EG.ELC.ACCS.ZS': ROOT / '20260529T011517Z_EG_ELC_ACCS_ZS.json',
+    'DEU': ROOT / 'DEU_WHOSIS_000001.json',
+    'USA': ROOT / 'USA_WHOSIS_000001.json',
+    'CHN': ROOT / 'CHN_WHOSIS_000001.json',
+    'IND': ROOT / 'IND_WHOSIS_000001.json',
+    'ZAF': ROOT / 'ZAF_WHOSIS_000001.json',
 }
 
 
@@ -27,14 +26,15 @@ def main() -> int:
     parser.add_argument('--user-agent', default='')
     args = parser.parse_args()
 
-    marker = '/indicator/'
-    if marker not in args.url:
-        raise SystemExit(f'No WDI indicator found in URL: {args.url}')
-    indicator_code = args.url.split(marker, 1)[1].split('?', 1)[0]
-    if indicator_code not in FIXTURES:
-        raise SystemExit(f'No mock fixture for WDI indicator: {indicator_code}')
+    decoded_url = unquote(args.url)
+    match = re.search(r"SpatialDim eq '([A-Z]{3})'", decoded_url)
+    if not match:
+        raise SystemExit(f'No WHO country code found in URL: {args.url}')
+    country_code = match.group(1)
+    if country_code not in FIXTURES:
+        raise SystemExit(f'No mock fixture for WHO country: {country_code}')
 
-    src = FIXTURES[indicator_code]
+    src = FIXTURES[country_code]
     dst = Path(args.output).resolve()
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(src, dst)

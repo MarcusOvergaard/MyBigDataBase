@@ -53,7 +53,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
    ```bash
    make load-wdi-live
    ```
-   This fetches a small real WDI API slice for the active Phase 1 backbone plus the first Phase 3 continuity indicators (fertility, life expectancy, primary enrollment, and electricity access), stores the raw JSON snapshots under `ingest/snapshots/wdi/WDI/`, records those files in `raw.source_snapshot`, lands the rows in `raw.wdi_country_indicator_annual`, and then reuses the same `raw -> staging -> core -> audit -> mart` pipeline.
+   This fetches a small real WDI API slice for the active Phase 1 backbone plus the first Phase 3 continuity indicators (fertility, life expectancy, primary enrollment, and electricity access), stores the raw JSON snapshots under `ingest/snapshots/wdi/WDI/`, records those files in `raw.source_snapshot`, lands the rows in `raw.wdi_country_indicator_annual`, and then reuses the same `raw -> staging -> core -> audit -> mart` pipeline. That WDI life-expectancy slice now also acts as the broad fallback underneath the narrower WHO health-authority overlap proof.
 
 5. **Optional: load the first narrow live WDI labor overlap slice**:
    ```bash
@@ -92,6 +92,8 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
    ```
    This checks the first demographic, health, education, and infrastructure serving slice after `make load-sample`: the annual domain marts, the wide `mart.mart_country_development_profile_latest` surface, and the `mart.vw_social_infrastructure_coverage_gaps` diagnostic for countries that already have some Phase 3 coverage.
 
+   If you also load the first WHO health-authority overlap slice with `make load-who-live`, run `make test-phase3-health-authority` to assert the new `mart.vw_phase3_source_conflicts` and `mart.vw_phase3_revision_history` diagnostics on top of the Phase 3 health mart.
+
 12. **Re-run the live WDI labor overlap contract check**:
    ```bash
    make test-live-wdi-labor-contract
@@ -114,13 +116,13 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
    ```bash
    make test-live-contracts
    ```
-   This runs the WDI backbone, WDI labor overlap, IFS, WEO, ILOSTAT, and UN Comtrade live contract checks back to back.
+   This runs the WDI backbone, WDI labor overlap, IFS, WEO, ILOSTAT, WHO, and UN Comtrade live contract checks back to back.
 
 16. **Re-run every live contract check against local fixtures**:
    ```bash
    make test-live-contracts-offline
    ```
-   This swaps each live fetcher for a committed fixture-backed mock helper under `tests/fixtures/live_sources/`, so the warehouse contract can be verified without depending on external APIs.
+   This swaps each live fetcher for a committed fixture-backed mock helper under `tests/fixtures/live_sources/`, including the first WHO life-expectancy authority fixtures, so the warehouse contract can be verified without depending on external APIs.
 
 17. **Assert the first Phase 2 inflation, labor, trade, external-balance, QA, and combined latest marts after the offline suite**:
    ```bash
@@ -185,7 +187,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 - `ddl/05_core_dimensions.sql`: `core.dim_country`, `core.dim_indicator`, `core.dim_source`, `core.dim_dataset`, and `core.dim_time`
 - `ddl/06_core_facts.sql`: `core.fact_country_indicator_version` and `core.fact_country_indicator_published`
 - `ddl/07_audit_tables.sql`: `audit.pipeline_run`, `audit.data_quality_event`, `audit.revision_event`, `audit.publication_version`, and `audit.dataset_freshness`
-- `ddl/08_marts_and_views.sql`: first Phase 1 marts and diagnostic views on the published/audit spine, including `mart.dataset_pipeline_health` for dataset-level operating health, `mart.dataset_pipeline_alerts` for alert-only monitoring, the first proper labor/inflation/trade/external-balance Phase 2 marts, the combined macro-plus-external latest snapshot, the first Phase 3 starter marts (`mart.mart_country_demographics_series_annual`, `mart.mart_country_health_series_annual`, `mart.mart_country_education_series_annual`, `mart.mart_country_infrastructure_latest`, `mart.mart_country_development_profile_latest`, and `mart.vw_social_infrastructure_coverage_gaps`), a thinner `mart.mart_country_phase2_latest` operator surface plus `mart.mart_country_phase2_readiness_summary`, `mart.mart_country_phase2_issues`, `mart.mart_country_phase2_dependency_explainer`, `mart.mart_country_phase2_ingestion_gap_explainer`, `mart.mart_phase2_dataset_ingestion_gap_rollup`, `mart.mart_phase2_dataset_operator_panel`, the compact `mart.vw_phase2_dataset_operator_panel_scan` / `mart.vw_phase2_dataset_status_history_scan` entry points for one-glance dataset monitoring, and labor/inflation/trade diagnostic views, including compact labor/inflation/GDP conflict summary entry points for routine inspection.
+- `ddl/08_marts_and_views.sql`: first Phase 1 marts and diagnostic views on the published/audit spine, including `mart.dataset_pipeline_health` for dataset-level operating health, `mart.dataset_pipeline_alerts` for alert-only monitoring, the first proper labor/inflation/trade/external-balance Phase 2 marts, the combined macro-plus-external latest snapshot, the first Phase 3 starter marts (`mart.mart_country_demographics_series_annual`, `mart.mart_country_health_series_annual`, `mart.mart_country_education_series_annual`, `mart.mart_country_infrastructure_latest`, `mart.mart_country_development_profile_latest`, and `mart.vw_social_infrastructure_coverage_gaps`), the new WHO-overlap diagnostics `mart.vw_phase3_source_conflicts` plus `mart.vw_phase3_revision_history`, a thinner `mart.mart_country_phase2_latest` operator surface plus `mart.mart_country_phase2_readiness_summary`, `mart.mart_country_phase2_issues`, `mart.mart_country_phase2_dependency_explainer`, `mart.mart_country_phase2_ingestion_gap_explainer`, `mart.mart_phase2_dataset_ingestion_gap_rollup`, `mart.mart_phase2_dataset_operator_panel`, the compact `mart.vw_phase2_dataset_operator_panel_scan` / `mart.vw_phase2_dataset_status_history_scan` entry points for one-glance dataset monitoring, and labor/inflation/trade diagnostic views, including compact labor/inflation/GDP conflict summary entry points for routine inspection.
 - `ddl/09_constraints_indexes.sql`: first Wave 8 hardening unit for constraints, indexes, and publish guards
 - `ddl/10_canonical_contract_followthrough.sql`: additive canonical-contract enforcement for comparability/source-switch lineage, including `mart.vw_macro_source_selection_lineage` for flattened source-selection diagnostics
 - `seeds/01_core_dimension_seeds.sql`: conformed core-dimension sync from `ref`
@@ -216,6 +218,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 - `etl/03_publish_phase1.sql`: Phase 1 staging -> core fact publication plus publish-guard enforcement.
 - `scripts/load_phase1_sample.sh`: default runnable sample loader for the Phase 1 raw/staging/core/audit/mart contract.
 - `scripts/load_wdi_live.sh`: first narrow live WDI loader that now defaults to the canonical seeded country basket from `ref.country`, fetches JSON snapshots for the macro backbone plus the first Phase 3 continuity indicators, records them in `raw.source_snapshot`, and publishes through the existing Phase 1 contract.
+- `scripts/load_who_live.sh`: first narrow live WHO GHO loader for life expectancy across the five-country Phase 3 health-authority proof basket (`DEU;USA;CHN;IND;ZAF`) over `2019-2021`, with snapshot evidence and publication through the same contract.
 - `scripts/load_wdi_labor_live.sh`: tiny real WDI labor fallback loader for `DEU` + `CHN` across `2019-2023`, with snapshot evidence, per-run manifest output, and metadata-driven labor-series lineage used both to prove labor source conflicts against ILOSTAT and to cover the repaired `CHN` labor-force-participation fallback path.
 - `scripts/load_ifs_live.sh`: widened live IFS loader that now defaults to the canonical seeded country basket from `ref.country` across the 2019-2023 proof window, fetches JSON snapshots plus IMF country metadata, records them in `raw.source_snapshot`, and publishes through the existing Phase 1 contract, including the real GDP-plus-inflation overlap proof used for source-priority diagnostics.
 - `scripts/load_weo_live.sh`: first live WEO loader that defaults to the canonical seeded country basket from `ref.country` across the widened 2019-2023 proof window, fetches IMF country metadata plus the current-account balance and current-account-percent-of-GDP DataMapper snapshots, records them in `raw.source_snapshot`, and publishes through the same warehouse contract.
@@ -224,6 +227,7 @@ make init DB_HOST=localhost DB_PORT=5432 DB_USER=postgres
 - `scripts/check_pipeline_alerts.sh`: exits non-zero when `mart.dataset_pipeline_alerts` contains any active alerts, for CI/cron health checks.
 - `queries/test_phase2_starter_marts.sql`: regression checks for the first proper labor mart, the inflation/trade/external-balance Phase 2 marts, the compact Phase 2 readiness/issues/latest snapshots, the dataset-level coverage trend surface, the country-to-dataset dependency explainer surface, the new ingestion-gap explainer surface that attributes missing rows to fetch scope vs normalization vs QA vs publication, the dataset-level ingestion-gap rollup that collapses those breaks by expected source, the per-dataset operator panel that merges freshness plus coverage and active-gap status, the new per-batch dataset-status history mart for deterioration/improvement tracking, and the verbose/deduped conflict diagnostics, with the noisy row dumps now gated behind `PHASE2_VERBOSE=1`.
 - `queries/test_phase3_starter_marts.sql`: regression checks for the first Phase 3 demographic / health / education / infrastructure marts, the combined development-profile latest surface, and the social/infrastructure coverage-gap diagnostic after the sample path.
+- `queries/test_phase3_health_authority.sql`: regression checks for the first WHO-vs-WDI Phase 3 health authority overlap, including conflict rows, selected-dataset lineage, and revision history after the WHO life-expectancy slice is loaded.
 - `queries/phase2_operator_scan.sql`: compact operational query entrypoint for the ranked Phase 2 dataset operator scan plus the latest and deteriorating batch-history scan.
 - `scripts/report_phase2_operator_scan.sh`: compact operational report wrapper for the Phase 2 dataset operator scan plus current pipeline alerts, suitable for cron delivery.
 - `scripts/check_phase2_operator_watchdog.sh`: silent-on-healthy watchdog wrapper that emits only when Phase 2 has active failing gaps or pipeline alerts.
@@ -279,6 +283,6 @@ Default offline real-ingestion proof bundle:
 make test-real-ingestion-offline
 ```
 
-That one command re-initializes the local warehouse schema, reruns every fixture-backed live contract, and then runs the compact Phase 2 SQL plus monitoring-wrapper regressions.
+That one command re-initializes the local warehouse schema, reruns every fixture-backed live contract, rebuilds the marts, and then runs the compact Phase 2 plus Phase 3 SQL regressions, including the new WHO health-authority overlap checks.
 
 The legacy compatibility commands and `mart.country_latest_macro` alias have been retired so the repo has one default execution path.
