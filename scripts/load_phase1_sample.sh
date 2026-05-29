@@ -22,7 +22,9 @@ CREATE TEMP TABLE tmp_wdi_sample (
     inflation_cpi_pct TEXT,
     population TEXT,
     fertility TEXT,
-    life_expectancy TEXT
+    life_expectancy TEXT,
+    school_enrollment_primary_pct TEXT,
+    access_to_electricity_pct TEXT
 );
 
 \\copy tmp_wdi_sample FROM '$SAMPLE_CSV' WITH (FORMAT csv, HEADER true);
@@ -100,7 +102,11 @@ CROSS JOIN LATERAL (
             'derived_gdp_per_capita'
         ),
         ('FP.CPI.TOTL.ZG', 'Inflation, consumer prices (annual %)', s.inflation_cpi_pct, 'inflation_cpi_pct'),
-        ('SP.POP.TOTL', 'Population, total', s.population, 'population')
+        ('SP.POP.TOTL', 'Population, total', s.population, 'population'),
+        ('SP.DYN.TFRT.IN', 'Fertility rate, total (births per woman)', s.fertility, 'fertility'),
+        ('SP.DYN.LE00.IN', 'Life expectancy at birth, total (years)', s.life_expectancy, 'life_expectancy'),
+        ('SE.PRM.ENRR', 'School enrollment, primary (% gross)', s.school_enrollment_primary_pct, 'school_enrollment_primary_pct'),
+        ('EG.ELC.ACCS.ZS', 'Access to electricity (% of population)', s.access_to_electricity_pct, 'access_to_electricity_pct')
 ) AS v(indicator_code_raw, indicator_name_raw, value_raw, measure_column);
 
 UPDATE raw.source_batch
