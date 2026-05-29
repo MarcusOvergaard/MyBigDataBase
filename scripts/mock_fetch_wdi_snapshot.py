@@ -6,7 +6,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent / 'ingest' / 'snapshots' / 'wdi' / 'WDI'
+ROOT = Path(__file__).resolve().parent.parent / 'tests' / 'fixtures' / 'live_sources' / 'wdi'
 FIXTURES = {
     'NY.GDP.MKTP.CD': ROOT / '20260529T011517Z_NY_GDP_MKTP_CD.json',
     'NY.GDP.PCAP.CD': ROOT / '20260529T011517Z_NY_GDP_PCAP_CD.json',
