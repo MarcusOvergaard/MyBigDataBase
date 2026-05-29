@@ -70,9 +70,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client
 
-      - name: Verify offline live contract suite and Phase 2 starter marts
+      - name: Verify offline real-ingestion proof bundle
         run: |
-          make init build-mart test-live-contracts-offline test-phase2-starter-marts-offline \
+          make test-real-ingestion-offline \
             DB_HOST=localhost \
             DB_PORT=5432 \
             DB_USER=postgres

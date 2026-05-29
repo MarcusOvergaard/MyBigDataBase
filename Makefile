@@ -10,7 +10,7 @@ PSQL = $(PSQL_BASE) -d $(DB_NAME)
 export DB_NAME
 export PSQL_CMD = $(PSQL_BASE)
 
-.PHONY: init create-db ddl seed load-sample load-wdi-live load-wdi-labor-live load-ifs-live load-ilostat-live load-un-comtrade-live clean-ifs-stale-snapshots build-mart test check-alerts test-live-wdi-contract test-live-wdi-labor-contract test-live-ifs-contract test-live-ilostat-contract test-live-un-comtrade-contract test-live-contracts test-live-contracts-offline test-phase2-starter-marts-offline repeat-load-test all
+.PHONY: init create-db ddl seed load-sample load-wdi-live load-wdi-labor-live load-ifs-live load-weo-live load-ilostat-live load-un-comtrade-live clean-ifs-stale-snapshots build-mart test check-alerts test-live-wdi-contract test-live-wdi-labor-contract test-live-ifs-contract test-live-weo-contract test-live-ilostat-contract test-live-un-comtrade-contract test-live-contracts test-live-contracts-offline test-phase2-starter-marts-offline test-phase2-starter-marts-debug test-phase2-monitoring-offline test-phase2-offline test-real-ingestion-offline verify-real-ingestion-live-state phase2-operator-scan phase2-operator-report phase2-operator-watchdog repeat-load-test all
 
 all: init
 
@@ -45,6 +45,11 @@ load-wdi-labor-live:
 load-ifs-live:
 	@chmod +x scripts/load_ifs_live.sh
 	@./scripts/load_ifs_live.sh
+
+# Load a narrow live WEO external-balance slice through the same warehouse contract
+load-weo-live:
+	@chmod +x scripts/load_weo_live.sh
+	@./scripts/load_weo_live.sh
 
 # Load a narrow live ILOSTAT unemployment slice through the same warehouse contract
 load-ilostat-live:
@@ -100,6 +105,12 @@ test-live-ifs-contract:
 	@chmod +x scripts/test_live_ifs_inflation_contract.sh
 	@./scripts/test_live_ifs_inflation_contract.sh
 
+# Re-run the live WEO external-balance slice and assert lineage/publication fields stay intact
+# Override FETCH_HELPER for offline fixture-backed runs if needed.
+test-live-weo-contract:
+	@chmod +x scripts/test_live_weo_external_balance_contract.sh
+	@./scripts/test_live_weo_external_balance_contract.sh
+
 # Re-run the live ILOSTAT labor slice and assert lineage/publication fields stay intact
 # Override FETCH_HELPER for offline fixture-backed runs if needed.
 test-live-ilostat-contract:
@@ -114,13 +125,14 @@ test-live-un-comtrade-contract:
 
 # Re-run all live contract checks in one shot
 # Override FETCH_HELPER for offline fixture-backed runs if needed.
-test-live-contracts: test-live-wdi-contract test-live-wdi-labor-contract test-live-ifs-contract test-live-ilostat-contract test-live-un-comtrade-contract
+test-live-contracts: test-live-wdi-contract test-live-wdi-labor-contract test-live-ifs-contract test-live-weo-contract test-live-ilostat-contract test-live-un-comtrade-contract
 
 # Re-run all live contract checks against local fixtures instead of external APIs
 test-live-contracts-offline:
 	@FETCH_HELPER=scripts/mock_fetch_wdi_snapshot.py ./scripts/test_live_wdi_contract.sh
 	@FETCH_HELPER=scripts/mock_fetch_wdi_labor_snapshot.py ./scripts/test_live_wdi_labor_contract.sh
 	@FETCH_HELPER=scripts/mock_fetch_ifs_snapshot.py ./scripts/test_live_ifs_inflation_contract.sh
+	@FETCH_HELPER=scripts/mock_fetch_weo_snapshot.py ./scripts/test_live_weo_external_balance_contract.sh
 	@FETCH_HELPER=scripts/mock_fetch_ilostat_snapshot.py ./scripts/test_live_ilostat_labor_contract.sh
 	@FETCH_HELPER=scripts/mock_fetch_uncomtrade_snapshot.py ./scripts/test_live_un_comtrade_contract.sh
 
@@ -128,6 +140,49 @@ test-live-contracts-offline:
 test-phase2-starter-marts-offline:
 	@echo "Running Phase 2 starter mart regression queries..."
 	@$(PSQL) -f queries/test_phase2_starter_marts.sql
+
+# Re-run the Phase 2 starter mart regression with verbose debug result sets enabled
+test-phase2-starter-marts-debug:
+	@echo "Running Phase 2 starter mart regression queries in verbose debug mode..."
+	@$(PSQL) -v PHASE2_VERBOSE=1 -f queries/test_phase2_starter_marts.sql
+
+# Offline smoke tests for the compact Phase 2 monitoring wrappers
+test-phase2-monitoring-offline:
+	@chmod +x scripts/test_phase2_monitoring_smoke.sh
+	@./scripts/test_phase2_monitoring_smoke.sh
+
+# Re-run the compact offline Phase 2 SQL regressions plus monitoring wrapper smoke tests
+test-phase2-offline: test-phase2-starter-marts-offline test-phase2-monitoring-offline
+
+# Re-run the full offline real-ingestion proof: bootstrap, fixture-backed live loaders, and Phase 2 regressions
+test-real-ingestion-offline:
+	@$(MAKE) init test-live-contracts-offline test-phase2-offline \
+		DB_NAME='$(DB_NAME)' \
+		DB_HOST='$(DB_HOST)' \
+		DB_PORT='$(DB_PORT)' \
+		DB_USER='$(DB_USER)'
+
+# Verify the current live database state without resetting it
+verify-real-ingestion-live-state:
+	@$(MAKE) phase2-operator-report check-alerts \
+		DB_NAME='$(DB_NAME)' \
+		DB_HOST='$(DB_HOST)' \
+		DB_PORT='$(DB_PORT)' \
+		DB_USER='$(DB_USER)'
+
+# Run the compact Phase 2 operator scan over the latest dataset and batch surfaces
+phase2-operator-scan:
+	@echo "Running compact Phase 2 operator scan..."
+	@$(PSQL) -f queries/phase2_operator_scan.sql
+
+# Run the compact Phase 2 operator report script including pipeline alerts
+phase2-operator-report:
+	@echo "Running Phase 2 operator report..."
+	@./scripts/report_phase2_operator_scan.sh
+
+# Emit output only when Phase 2 has active failures or pipeline alerts
+phase2-operator-watchdog:
+	@./scripts/check_phase2_operator_watchdog.sh
 
 # Re-run the sample loaders and assert the published contract stays stable
 repeat-load-test:

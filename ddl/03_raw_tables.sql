@@ -94,6 +94,33 @@ CREATE INDEX IF NOT EXISTS idx_raw_ifs_country_indicator_annual_batch
 CREATE INDEX IF NOT EXISTS idx_raw_ifs_country_indicator_annual_lookup
     ON raw.ifs_country_indicator_annual (country_code_raw, indicator_code_raw, year_raw);
 
+CREATE TABLE IF NOT EXISTS raw.weo_country_indicator_annual (
+    raw_row_key BIGSERIAL PRIMARY KEY,
+    source_batch_key BIGINT NOT NULL REFERENCES raw.source_batch(source_batch_key),
+    country_code_raw VARCHAR(20),
+    country_name_raw VARCHAR(150),
+    indicator_code_raw VARCHAR(100),
+    indicator_name_raw VARCHAR(255),
+    year_raw VARCHAR(10) NOT NULL,
+    value_raw TEXT,
+    obs_status_raw VARCHAR(30),
+    decimal_raw VARCHAR(10),
+    source_payload_json JSONB,
+    loaded_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_raw_weo_country_indicator_annual UNIQUE (
+        source_batch_key,
+        country_code_raw,
+        indicator_code_raw,
+        year_raw
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_raw_weo_country_indicator_annual_batch
+    ON raw.weo_country_indicator_annual (source_batch_key);
+
+CREATE INDEX IF NOT EXISTS idx_raw_weo_country_indicator_annual_lookup
+    ON raw.weo_country_indicator_annual (country_code_raw, indicator_code_raw, year_raw);
+
 CREATE TABLE IF NOT EXISTS raw.ilostat_country_indicator_annual (
     raw_row_key BIGSERIAL PRIMARY KEY,
     source_batch_key BIGINT NOT NULL REFERENCES raw.source_batch(source_batch_key),

@@ -6,11 +6,11 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent / 'ingest' / 'snapshots' / 'ifs' / 'IFS'
+ROOT = Path(__file__).resolve().parent.parent / 'tests' / 'fixtures' / 'live_sources' / 'ifs'
 FIXTURES = {
-    'countries': ROOT / '20260523T030000Z_countries.json',
-    'PCPIPCH': ROOT / '20260523T030000Z_PCPIPCH.json',
-    'NGDPD': ROOT / '20260523T030000Z_NGDPD.json',
+    'countries': ROOT / 'countries.json',
+    'PCPIPCH': ROOT / 'PCPIPCH.json',
+    'NGDPD': ROOT / 'NGDPD.json',
 }
 
 

@@ -6,11 +6,11 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent / 'tests' / 'fixtures' / 'live_sources' / 'wdi_labor'
+ROOT = Path(__file__).resolve().parent.parent / 'tests' / 'fixtures' / 'live_sources' / 'weo'
 FIXTURES = {
-    'SL.EMP.TOTL.SP.ZS': ROOT / 'SL_EMP_TOTL_SP_ZS_DEU_CHN_2019_2023.json',
-    'SL.TLF.CACT.ZS': ROOT / 'SL_TLF_CACT_ZS_DEU_CHN_2019_2023.json',
-    'SL.UEM.TOTL.ZS': ROOT / 'SL_UEM_TOTL_ZS_DEU_CHN_2019_2023.json',
+    'countries': ROOT / 'countries.json',
+    'BCA': ROOT / 'BCA.json',
+    'BCA_NGDPD': ROOT / 'BCA_NGDPD.json',
 }
 
 
@@ -22,14 +22,11 @@ def main() -> int:
     parser.add_argument('--user-agent', default='')
     args = parser.parse_args()
 
-    marker = '/indicator/'
-    if marker not in args.url:
-        raise SystemExit(f'No WDI indicator found in URL: {args.url}')
-    indicator_code = args.url.split(marker, 1)[1].split('?', 1)[0]
-    if indicator_code not in FIXTURES:
-        raise SystemExit(f'No mock fixture for WDI labor indicator: {indicator_code}')
+    key = args.url.rstrip('/').split('/')[-1]
+    if key not in FIXTURES:
+        raise SystemExit(f'No mock fixture for URL: {args.url}')
 
-    src = FIXTURES[indicator_code]
+    src = FIXTURES[key]
     dst = Path(args.output).resolve()
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(src, dst)

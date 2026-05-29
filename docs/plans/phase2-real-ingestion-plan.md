@@ -293,17 +293,17 @@ Files:
 - Modify: `README.md`
 
 Targets to add:
-- `make load-wdi-api`
-- `make load-ifs-api`
-- `make load-real-sample` or `make load-live`
+- `make load-wdi-live`
+- `make load-ifs-live`
+- keep sample and live entrypoints explicit rather than hiding them behind one overloaded alias
 
 Rule:
 - keep `make load-sample` for local canned data
 - make the live path explicit, not magical
 
 Verification:
-- `make load-wdi-api`
-- `make load-ifs-api`
+- `make load-wdi-live`
+- `make load-ifs-live`
 - expected: commands are discoverable and documented
 
 ---
@@ -361,8 +361,8 @@ Run:
 - `make load-sample`
 - `make test`
 - `make repeat-load-test`
-- `make load-wdi-api`
-- `make load-ifs-api`
+- `make load-wdi-live`
+- `make load-ifs-live`
 - `make build-mart test`
 
 Expected:

@@ -4,25 +4,25 @@ set -euo pipefail
 DB_NAME="${DB_NAME:-country_intel}"
 PSQL_CMD="${PSQL_CMD:-psql -v ON_ERROR_STOP=1}"
 FETCH_HELPER="${FETCH_HELPER:-scripts/fetch_http_to_snapshot.py}"
-IFS_COUNTRIES="${IFS_COUNTRIES:-}"
-IFS_YEARS="${IFS_YEARS:-2019;2020;2021;2022;2023}"
-IFS_DATASET_CODE="${IFS_DATASET_CODE:-IFS}"
-SNAPSHOT_ROOT="${SNAPSHOT_ROOT:-ingest/snapshots/ifs/IFS}"
+WEO_COUNTRIES="${WEO_COUNTRIES:-}"
+WEO_YEARS="${WEO_YEARS:-2019;2020;2021;2022;2023}"
+WEO_DATASET_CODE="${WEO_DATASET_CODE:-WEO}"
+SNAPSHOT_ROOT="${SNAPSHOT_ROOT:-ingest/snapshots/weo/WEO}"
 RUN_TS="${RUN_TS:-$(date -u +%Y%m%dT%H%M%SZ)}"
-BATCH_EXTERNAL_ID="${BATCH_EXTERNAL_ID:-ifs_live_${RUN_TS}}"
-IFS_API_BASE="${IFS_API_BASE:-https://www.imf.org/external/datamapper/api/v1}"
+BATCH_EXTERNAL_ID="${BATCH_EXTERNAL_ID:-weo_live_${RUN_TS}}"
+WEO_API_BASE="${WEO_API_BASE:-https://www.imf.org/external/datamapper/api/v1}"
 
 if [[ ! -f "$FETCH_HELPER" ]]; then
     echo "Fetch helper not found: $FETCH_HELPER" >&2
     exit 1
 fi
 
-if [[ -z "$IFS_COUNTRIES" || "${IFS_COUNTRIES,,}" == "default" || "${IFS_COUNTRIES,,}" == "all" ]]; then
-    IFS_COUNTRIES="$($PSQL_CMD -d "$DB_NAME" -Atqc "SELECT string_agg(iso_alpha_3, ';' ORDER BY iso_alpha_3) FROM ref.country WHERE is_active = TRUE AND COALESCE(is_aggregate, FALSE) = FALSE")"
+if [[ -z "$WEO_COUNTRIES" || "${WEO_COUNTRIES,,}" == "default" || "${WEO_COUNTRIES,,}" == "all" ]]; then
+    WEO_COUNTRIES="$($PSQL_CMD -d "$DB_NAME" -Atqc "SELECT string_agg(iso_alpha_3, ';' ORDER BY iso_alpha_3) FROM ref.country WHERE is_active = TRUE AND COALESCE(is_aggregate, FALSE) = FALSE")"
 fi
 
-if [[ -z "$IFS_COUNTRIES" ]]; then
-    echo "No IFS countries resolved. Seed ref.country first or pass IFS_COUNTRIES explicitly." >&2
+if [[ -z "$WEO_COUNTRIES" ]]; then
+    echo "No WEO countries resolved. Seed ref.country first or pass WEO_COUNTRIES explicitly." >&2
     exit 1
 fi
 
@@ -42,7 +42,7 @@ cleanup() {
         done
         rm -f "$manifest_path"
         if [[ $snapshot_count -gt 0 ]]; then
-            echo "Cleaned up incomplete IFS snapshot run: $RUN_TS" >&2
+            echo "Cleaned up incomplete WEO snapshot run: $RUN_TS" >&2
         fi
     fi
     rm -f "$meta_tsv" "$row_csv" "$series_tsv"
@@ -62,19 +62,16 @@ JOIN ref.source_series rs
 JOIN ref.indicator_source_series_map ism
   ON ism.source_series_key = rs.source_series_key
  AND ism.is_active = TRUE
-JOIN ref.indicator i
-  ON i.indicator_key = ism.indicator_key
- AND i.is_phase_1 = TRUE
 LEFT JOIN ref.source_series_alias ssa
   ON ssa.source_series_key = rs.source_series_key
  AND ssa.alias_type = 'imf_datamapper_indicator'
  AND ssa.is_active = TRUE
-WHERE d.dataset_code = '$IFS_DATASET_CODE'
+WHERE d.dataset_code = '$WEO_DATASET_CODE'
 ORDER BY rs.series_code;
 SQL
 
 if [[ ! -s "$series_tsv" ]]; then
-    echo "No active Phase 1 IFS source-series mappings found for dataset $IFS_DATASET_CODE" >&2
+    echo "No active WEO source-series mappings found for dataset $WEO_DATASET_CODE" >&2
     exit 1
 fi
 
@@ -144,20 +141,20 @@ PY
 
 countries_snapshot="$SNAPSHOT_ROOT/${RUN_TS}_countries.json"
 echo "Fetching IMF country metadata..."
-countries_meta_json="$(python3 "$FETCH_HELPER" --user-agent '' --url "$IFS_API_BASE/countries" --output "$countries_snapshot")"
+countries_meta_json="$(python3 "$FETCH_HELPER" --user-agent '' --url "$WEO_API_BASE/countries" --output "$countries_snapshot")"
 write_meta_row "$countries_meta_json"
 snapshot_paths+=("$countries_snapshot")
 
 for api_indicator_code in "${API_INDICATORS[@]}"; do
     snapshot_path="$SNAPSHOT_ROOT/${RUN_TS}_${api_indicator_code}.json"
-    url="$IFS_API_BASE/${api_indicator_code}"
-    echo "Fetching IMF IFS ${api_indicator_code}..."
+    url="$WEO_API_BASE/${api_indicator_code}"
+    echo "Fetching IMF WEO ${api_indicator_code}..."
     meta_json="$(python3 "$FETCH_HELPER" --user-agent '' --url "$url" --output "$snapshot_path")"
     write_meta_row "$meta_json"
     snapshot_paths+=("$snapshot_path")
 done
 
-python3 - "$row_csv" "$countries_snapshot" "$IFS_COUNTRIES" "$IFS_YEARS" "$series_tsv" "${snapshot_paths[@]:1}" <<'PY'
+python3 - "$row_csv" "$countries_snapshot" "$WEO_COUNTRIES" "$WEO_YEARS" "$series_tsv" "${snapshot_paths[@]:1}" <<'PY'
 import csv
 import json
 import sys
@@ -228,7 +225,7 @@ with out_path.open('w', newline='', encoding='utf-8') as handle:
                     'year': year,
                     'value': '' if value is None else (
                         str(float(value) * 1000000000)
-                        if api_indicator_code == 'NGDPD'
+                        if api_indicator_code == 'BCA'
                         else str(value)
                     ),
                     'obs_status': '',
@@ -251,9 +248,9 @@ ROW_CSV="$row_csv" \
 MANIFEST_PATH="$manifest_path" \
 RUN_TS="$RUN_TS" \
 BATCH_EXTERNAL_ID="$BATCH_EXTERNAL_ID" \
-IFS_COUNTRIES="$IFS_COUNTRIES" \
-IFS_YEARS="$IFS_YEARS" \
-IFS_DATASET_CODE="$IFS_DATASET_CODE" \
+WEO_COUNTRIES="$WEO_COUNTRIES" \
+WEO_YEARS="$WEO_YEARS" \
+WEO_DATASET_CODE="$WEO_DATASET_CODE" \
 SNAPSHOT_ROOT="$SNAPSHOT_ROOT" \
 SERIES_TSV="$series_tsv" \
 python3 - <<'PY'
@@ -286,9 +283,9 @@ with series_tsv.open('r', encoding='utf-8', newline='') as handle:
 manifest = {
     'run_ts': os.environ['RUN_TS'],
     'batch_external_id': os.environ['BATCH_EXTERNAL_ID'],
-    'dataset_code': os.environ['IFS_DATASET_CODE'],
-    'countries': [code for code in os.environ['IFS_COUNTRIES'].split(';') if code],
-    'years': [year for year in os.environ['IFS_YEARS'].split(';') if year],
+    'dataset_code': os.environ['WEO_DATASET_CODE'],
+    'countries': [code for code in os.environ['WEO_COUNTRIES'].split(';') if code],
+    'years': [year for year in os.environ['WEO_YEARS'].split(';') if year],
     'snapshot_root': os.path.abspath(os.environ['SNAPSHOT_ROOT']),
     'row_count_reported': row_count,
     'requested_series': series,
@@ -298,10 +295,10 @@ manifest = {
 manifest_path.write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
 PY
 
-echo "=== Loading live IFS slice into $DB_NAME ==="
+echo "=== Loading live WEO slice into $DB_NAME ==="
 
 $PSQL_CMD -d "$DB_NAME" <<SQL
-CREATE TEMP TABLE tmp_ifs_snapshot_meta (
+CREATE TEMP TABLE tmp_weo_snapshot_meta (
     snapshot_path TEXT,
     content_type TEXT,
     file_hash_sha256 TEXT,
@@ -310,9 +307,9 @@ CREATE TEMP TABLE tmp_ifs_snapshot_meta (
     source_url TEXT
 );
 
-\copy tmp_ifs_snapshot_meta FROM '$meta_tsv' WITH (FORMAT csv, DELIMITER E'\t', HEADER true);
+\copy tmp_weo_snapshot_meta FROM '$meta_tsv' WITH (FORMAT csv, DELIMITER E'\t', HEADER true);
 
-CREATE TEMP TABLE tmp_ifs_live_rows (
+CREATE TEMP TABLE tmp_weo_live_rows (
     country_code TEXT,
     country_name TEXT,
     indicator_code TEXT,
@@ -325,7 +322,7 @@ CREATE TEMP TABLE tmp_ifs_live_rows (
     api_indicator_code TEXT
 );
 
-\copy tmp_ifs_live_rows FROM '$row_csv' WITH (FORMAT csv, HEADER true);
+\copy tmp_weo_live_rows FROM '$row_csv' WITH (FORMAT csv, HEADER true);
 
 WITH inserted_batch AS (
     INSERT INTO raw.source_batch (
@@ -343,21 +340,21 @@ WITH inserted_batch AS (
         '$BATCH_EXTERNAL_ID',
         d.ingest_base_endpoint,
         jsonb_build_object(
-            'loader', 'scripts/load_ifs_live.sh',
-            'countries', '$IFS_COUNTRIES',
-            'years', '$IFS_YEARS',
-            'dataset_code', '$IFS_DATASET_CODE',
+            'loader', 'scripts/load_weo_live.sh',
+            'countries', '$WEO_COUNTRIES',
+            'years', '$WEO_YEARS',
+            'dataset_code', '$WEO_DATASET_CODE',
             'snapshot_root', '$SNAPSHOT_ROOT',
             'api_indicator_codes', '$API_INDICATOR_CODES_JSON'::jsonb,
             'source_series_codes', '$SOURCE_SERIES_CODES_JSON'::jsonb,
             'series_count', $SERIES_COUNT
         ),
-        COALESCE((SELECT MAX(fetched_at) FROM tmp_ifs_snapshot_meta), CURRENT_TIMESTAMP),
+        COALESCE((SELECT MAX(fetched_at) FROM tmp_weo_snapshot_meta), CURRENT_TIMESTAMP),
         NULL,
         'queued',
         $row_count_reported
     FROM ref.source_dataset d
-    WHERE d.dataset_code = '$IFS_DATASET_CODE'
+    WHERE d.dataset_code = '$WEO_DATASET_CODE'
     RETURNING source_batch_key
 )
 SELECT source_batch_key FROM inserted_batch \gset
@@ -379,10 +376,10 @@ SELECT
     fetched_at,
     http_status_code,
     NULLIF(source_url, '')
-FROM tmp_ifs_snapshot_meta
+FROM tmp_weo_snapshot_meta
 ON CONFLICT (snapshot_path) DO NOTHING;
 
-INSERT INTO raw.ifs_country_indicator_annual (
+INSERT INTO raw.weo_country_indicator_annual (
     source_batch_key,
     country_code_raw,
     country_name_raw,
@@ -405,17 +402,17 @@ SELECT
     NULLIF(obs_status, ''),
     NULLIF(decimal, ''),
     jsonb_build_object(
-        'loader', 'scripts/load_ifs_live.sh',
+        'loader', 'scripts/load_weo_live.sh',
         'snapshot_path', snapshot_path,
         'ingestion_type', 'live_api_snapshot',
         'source_indicator_code', api_indicator_code
     )
-FROM tmp_ifs_live_rows;
+FROM tmp_weo_live_rows;
 
 UPDATE raw.source_batch
 SET row_count_reported = (
         SELECT COUNT(*)
-        FROM raw.ifs_country_indicator_annual
+        FROM raw.weo_country_indicator_annual
         WHERE source_batch_key = :source_batch_key
     ),
     ingest_status = 'loaded'
@@ -432,4 +429,4 @@ SQL
 
 run_succeeded=1
 
-echo "=== Live IFS load complete ==="
+echo "=== Live WEO load complete ==="

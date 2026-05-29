@@ -104,6 +104,8 @@ DROP VIEW IF EXISTS mart.vw_macro_published_with_lineage CASCADE;
 DROP VIEW IF EXISTS mart.vw_macro_coverage_gaps CASCADE;
 DROP VIEW IF EXISTS mart.vw_dataset_freshness_status CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_phase2_latest CASCADE;
+DROP VIEW IF EXISTS mart.vw_phase2_dataset_status_history_scan CASCADE;
+DROP VIEW IF EXISTS mart.mart_phase2_dataset_status_history CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_macro_plus_external_latest CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_trade_external_panel_annual CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_inflation_series_annual CASCADE;
