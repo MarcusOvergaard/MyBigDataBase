@@ -6,6 +6,13 @@ DROP VIEW IF EXISTS mart.vw_phase2_dataset_status_history_scan CASCADE;
 DROP VIEW IF EXISTS mart.vw_phase2_dataset_operator_panel_scan CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_phase2_ingestion_gap_explainer CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_phase2_dependency_explainer CASCADE;
+DROP VIEW IF EXISTS mart.vw_social_infrastructure_coverage_gaps CASCADE;
+DROP VIEW IF EXISTS mart.mart_country_development_profile_latest CASCADE;
+DROP VIEW IF EXISTS mart.mart_country_infrastructure_latest CASCADE;
+DROP VIEW IF EXISTS mart.mart_country_infrastructure_series_annual CASCADE;
+DROP VIEW IF EXISTS mart.mart_country_education_series_annual CASCADE;
+DROP VIEW IF EXISTS mart.mart_country_health_series_annual CASCADE;
+DROP VIEW IF EXISTS mart.mart_country_demographics_series_annual CASCADE;
 DROP VIEW IF EXISTS mart.mart_phase2_dataset_coverage_trend CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_phase2_issues CASCADE;
 DROP VIEW IF EXISTS mart.mart_country_phase2_readiness_summary CASCADE;
@@ -146,6 +153,168 @@ WHERE ms.indicator_code IN (
     'LABOR_FORCE_PARTICIPATION_RATE_PCT',
     'UNEMPLOYMENT_RATE_PCT'
 );
+
+CREATE OR REPLACE VIEW mart.mart_country_demographics_series_annual AS
+SELECT
+    ms.country_key,
+    ms.iso_alpha_3,
+    ms.country_name,
+    ms.region_name,
+    ms.income_group,
+    ms.indicator_key,
+    ms.indicator_code,
+    ms.indicator_name,
+    ms.topic,
+    ms.time_key,
+    ms.observation_year,
+    ms.observation_value,
+    ms.unit_key,
+    ms.unit_code,
+    ms.unit_name,
+    ms.source_system_key,
+    ms.source_code,
+    ms.source_name,
+    ms.source_dataset_key,
+    ms.dataset_code,
+    ms.dataset_name,
+    ms.source_series_key,
+    ms.series_code,
+    ms.series_name,
+    ms.source_batch_key,
+    ms.observation_version_key,
+    ms.selection_method,
+    ms.publication_version_key,
+    ms.published_at
+FROM mart.mart_country_macro_series_annual ms
+WHERE ms.indicator_code IN (
+    'POP_TOTAL',
+    'FERTILITY_RATE_BIRTHS_PER_WOMAN'
+);
+
+CREATE OR REPLACE VIEW mart.mart_country_health_series_annual AS
+SELECT
+    ms.country_key,
+    ms.iso_alpha_3,
+    ms.country_name,
+    ms.region_name,
+    ms.income_group,
+    ms.indicator_key,
+    ms.indicator_code,
+    ms.indicator_name,
+    ms.topic,
+    ms.time_key,
+    ms.observation_year,
+    ms.observation_value,
+    ms.unit_key,
+    ms.unit_code,
+    ms.unit_name,
+    ms.source_system_key,
+    ms.source_code,
+    ms.source_name,
+    ms.source_dataset_key,
+    ms.dataset_code,
+    ms.dataset_name,
+    ms.source_series_key,
+    ms.series_code,
+    ms.series_name,
+    ms.source_batch_key,
+    ms.observation_version_key,
+    ms.selection_method,
+    ms.publication_version_key,
+    ms.published_at
+FROM mart.mart_country_macro_series_annual ms
+WHERE ms.indicator_code = 'LIFE_EXPECTANCY_YEARS';
+
+CREATE OR REPLACE VIEW mart.mart_country_education_series_annual AS
+SELECT
+    ms.country_key,
+    ms.iso_alpha_3,
+    ms.country_name,
+    ms.region_name,
+    ms.income_group,
+    ms.indicator_key,
+    ms.indicator_code,
+    ms.indicator_name,
+    ms.topic,
+    ms.time_key,
+    ms.observation_year,
+    ms.observation_value,
+    ms.unit_key,
+    ms.unit_code,
+    ms.unit_name,
+    ms.source_system_key,
+    ms.source_code,
+    ms.source_name,
+    ms.source_dataset_key,
+    ms.dataset_code,
+    ms.dataset_name,
+    ms.source_series_key,
+    ms.series_code,
+    ms.series_name,
+    ms.source_batch_key,
+    ms.observation_version_key,
+    ms.selection_method,
+    ms.publication_version_key,
+    ms.published_at
+FROM mart.mart_country_macro_series_annual ms
+WHERE ms.indicator_code = 'SCHOOL_ENROLLMENT_PRIMARY_PCT';
+
+CREATE OR REPLACE VIEW mart.mart_country_infrastructure_series_annual AS
+SELECT
+    ms.country_key,
+    ms.iso_alpha_3,
+    ms.country_name,
+    ms.region_name,
+    ms.income_group,
+    ms.indicator_key,
+    ms.indicator_code,
+    ms.indicator_name,
+    ms.topic,
+    ms.time_key,
+    ms.observation_year,
+    ms.observation_value,
+    ms.unit_key,
+    ms.unit_code,
+    ms.unit_name,
+    ms.source_system_key,
+    ms.source_code,
+    ms.source_name,
+    ms.source_dataset_key,
+    ms.dataset_code,
+    ms.dataset_name,
+    ms.source_series_key,
+    ms.series_code,
+    ms.series_name,
+    ms.source_batch_key,
+    ms.observation_version_key,
+    ms.selection_method,
+    ms.publication_version_key,
+    ms.published_at
+FROM mart.mart_country_macro_series_annual ms
+WHERE ms.indicator_code = 'ACCESS_TO_ELECTRICITY_PCT';
+
+CREATE OR REPLACE VIEW mart.mart_country_infrastructure_latest AS
+WITH ranked AS (
+    SELECT
+        infra.*,
+        ROW_NUMBER() OVER (
+            PARTITION BY infra.country_key, infra.indicator_key
+            ORDER BY infra.observation_year DESC, infra.published_at DESC, infra.observation_version_key DESC
+        ) AS recency_rank
+    FROM mart.mart_country_infrastructure_series_annual infra
+)
+SELECT
+    r.country_key,
+    r.iso_alpha_3,
+    r.country_name,
+    r.region_name,
+    r.income_group,
+    MAX(CASE WHEN r.indicator_code = 'ACCESS_TO_ELECTRICITY_PCT' THEN r.observation_year END) AS access_to_electricity_pct_year,
+    MAX(CASE WHEN r.indicator_code = 'ACCESS_TO_ELECTRICITY_PCT' THEN r.observation_value END) AS access_to_electricity_pct,
+    MAX(r.published_at) AS latest_published_at
+FROM ranked r
+WHERE r.recency_rank = 1
+GROUP BY r.country_key, r.iso_alpha_3, r.country_name, r.region_name, r.income_group;
 
 CREATE OR REPLACE VIEW mart.mart_country_inflation_series_annual AS
 SELECT
@@ -397,6 +566,173 @@ GROUP BY
     ml.pop_total_year,
     ml.pop_total,
     ml.latest_published_at;
+
+CREATE OR REPLACE VIEW mart.mart_country_phase3_series_annual AS
+SELECT *
+FROM mart.mart_country_demographics_series_annual
+UNION ALL
+SELECT *
+FROM mart.mart_country_health_series_annual
+UNION ALL
+SELECT *
+FROM mart.mart_country_education_series_annual
+UNION ALL
+SELECT *
+FROM mart.mart_country_infrastructure_series_annual;
+
+CREATE OR REPLACE VIEW mart.mart_country_development_profile_latest AS
+WITH ranked AS (
+    SELECT
+        p3.*,
+        ROW_NUMBER() OVER (
+            PARTITION BY p3.country_key, p3.indicator_key
+            ORDER BY p3.observation_year DESC, p3.published_at DESC, p3.observation_version_key DESC
+        ) AS recency_rank
+    FROM mart.mart_country_phase3_series_annual p3
+)
+SELECT
+    mpe.country_key,
+    mpe.iso_alpha_3,
+    mpe.country_name,
+    mpe.region_name,
+    mpe.income_group,
+    mpe.gdp_curr_usd_year,
+    mpe.gdp_curr_usd,
+    mpe.gdp_pc_curr_usd_year,
+    mpe.gdp_pc_curr_usd,
+    mpe.pop_total_year,
+    mpe.pop_total,
+    mpe.employment_rate_pct_year,
+    mpe.employment_rate_pct,
+    mpe.labor_force_participation_rate_pct_year,
+    mpe.labor_force_participation_rate_pct,
+    mpe.unemployment_rate_pct_year,
+    mpe.unemployment_rate_pct,
+    mpe.inflation_cpi_pct_year,
+    mpe.inflation_cpi_pct,
+    mpe.trade_exports_curr_usd_year,
+    mpe.trade_exports_curr_usd,
+    mpe.trade_imports_curr_usd_year,
+    mpe.trade_imports_curr_usd,
+    mpe.current_account_balance_curr_usd_year,
+    mpe.current_account_balance_curr_usd,
+    mpe.current_account_balance_pct_gdp_year,
+    mpe.current_account_balance_pct_gdp,
+    mpe.trade_balance_curr_usd,
+    mpe.trade_balance_direction,
+    (
+        CASE WHEN MAX(CASE WHEN r.indicator_code = 'FERTILITY_RATE_BIRTHS_PER_WOMAN' THEN r.observation_year END) IS NOT NULL THEN 1 ELSE 0 END
+      + CASE WHEN MAX(CASE WHEN r.indicator_code = 'LIFE_EXPECTANCY_YEARS' THEN r.observation_year END) IS NOT NULL THEN 1 ELSE 0 END
+      + CASE WHEN MAX(CASE WHEN r.indicator_code = 'SCHOOL_ENROLLMENT_PRIMARY_PCT' THEN r.observation_year END) IS NOT NULL THEN 1 ELSE 0 END
+      + CASE WHEN MAX(CASE WHEN r.indicator_code = 'ACCESS_TO_ELECTRICITY_PCT' THEN r.observation_year END) IS NOT NULL THEN 1 ELSE 0 END
+    ) AS phase3_indicator_coverage_count,
+    NULLIF(
+        GREATEST(
+            COALESCE(MAX(CASE WHEN r.indicator_code = 'FERTILITY_RATE_BIRTHS_PER_WOMAN' THEN r.observation_year END), 0),
+            COALESCE(MAX(CASE WHEN r.indicator_code = 'LIFE_EXPECTANCY_YEARS' THEN r.observation_year END), 0),
+            COALESCE(MAX(CASE WHEN r.indicator_code = 'SCHOOL_ENROLLMENT_PRIMARY_PCT' THEN r.observation_year END), 0),
+            COALESCE(MAX(CASE WHEN r.indicator_code = 'ACCESS_TO_ELECTRICITY_PCT' THEN r.observation_year END), 0)
+        ),
+        0
+    ) AS latest_phase3_observation_year,
+    MAX(CASE WHEN r.indicator_code = 'FERTILITY_RATE_BIRTHS_PER_WOMAN' THEN r.observation_year END) AS fertility_rate_births_per_woman_year,
+    MAX(CASE WHEN r.indicator_code = 'FERTILITY_RATE_BIRTHS_PER_WOMAN' THEN r.observation_value END) AS fertility_rate_births_per_woman,
+    MAX(CASE WHEN r.indicator_code = 'LIFE_EXPECTANCY_YEARS' THEN r.observation_year END) AS life_expectancy_years_year,
+    MAX(CASE WHEN r.indicator_code = 'LIFE_EXPECTANCY_YEARS' THEN r.observation_value END) AS life_expectancy_years,
+    MAX(CASE WHEN r.indicator_code = 'SCHOOL_ENROLLMENT_PRIMARY_PCT' THEN r.observation_year END) AS school_enrollment_primary_pct_year,
+    MAX(CASE WHEN r.indicator_code = 'SCHOOL_ENROLLMENT_PRIMARY_PCT' THEN r.observation_value END) AS school_enrollment_primary_pct,
+    MAX(CASE WHEN r.indicator_code = 'ACCESS_TO_ELECTRICITY_PCT' THEN r.observation_year END) AS access_to_electricity_pct_year,
+    MAX(CASE WHEN r.indicator_code = 'ACCESS_TO_ELECTRICITY_PCT' THEN r.observation_value END) AS access_to_electricity_pct,
+    GREATEST(mpe.latest_published_at, COALESCE(MAX(r.published_at), mpe.latest_published_at)) AS latest_published_at
+FROM mart.mart_country_macro_plus_external_latest mpe
+LEFT JOIN ranked r
+  ON r.country_key = mpe.country_key
+ AND r.recency_rank = 1
+GROUP BY
+    mpe.country_key,
+    mpe.iso_alpha_3,
+    mpe.country_name,
+    mpe.region_name,
+    mpe.income_group,
+    mpe.gdp_curr_usd_year,
+    mpe.gdp_curr_usd,
+    mpe.gdp_pc_curr_usd_year,
+    mpe.gdp_pc_curr_usd,
+    mpe.pop_total_year,
+    mpe.pop_total,
+    mpe.employment_rate_pct_year,
+    mpe.employment_rate_pct,
+    mpe.labor_force_participation_rate_pct_year,
+    mpe.labor_force_participation_rate_pct,
+    mpe.unemployment_rate_pct_year,
+    mpe.unemployment_rate_pct,
+    mpe.inflation_cpi_pct_year,
+    mpe.inflation_cpi_pct,
+    mpe.trade_exports_curr_usd_year,
+    mpe.trade_exports_curr_usd,
+    mpe.trade_imports_curr_usd_year,
+    mpe.trade_imports_curr_usd,
+    mpe.current_account_balance_curr_usd_year,
+    mpe.current_account_balance_curr_usd,
+    mpe.current_account_balance_pct_gdp_year,
+    mpe.current_account_balance_pct_gdp,
+    mpe.trade_balance_curr_usd,
+    mpe.trade_balance_direction,
+    mpe.latest_published_at;
+
+CREATE OR REPLACE VIEW mart.vw_social_infrastructure_coverage_gaps AS
+WITH base_countries AS (
+    SELECT
+        d.country_key,
+        d.iso_alpha_3,
+        d.country_name,
+        d.region_name,
+        d.income_group
+    FROM mart.mart_country_development_profile_latest d
+    WHERE d.phase3_indicator_coverage_count > 0
+),
+expected_indicators AS (
+    SELECT *
+    FROM (VALUES
+        ('FERTILITY_RATE_BIRTHS_PER_WOMAN', 'demographics'),
+        ('LIFE_EXPECTANCY_YEARS', 'health'),
+        ('SCHOOL_ENROLLMENT_PRIMARY_PCT', 'education'),
+        ('ACCESS_TO_ELECTRICITY_PCT', 'infrastructure')
+    ) AS e(indicator_code, topic)
+),
+ranked AS (
+    SELECT
+        p3.country_key,
+        p3.indicator_code,
+        p3.indicator_name,
+        p3.topic,
+        p3.observation_year,
+        p3.published_at,
+        p3.observation_version_key,
+        ROW_NUMBER() OVER (
+            PARTITION BY p3.country_key, p3.indicator_code
+            ORDER BY p3.observation_year DESC, p3.published_at DESC, p3.observation_version_key DESC
+        ) AS recency_rank
+    FROM mart.mart_country_phase3_series_annual p3
+)
+SELECT
+    bc.country_key,
+    bc.iso_alpha_3,
+    bc.country_name,
+    bc.region_name,
+    bc.income_group,
+    ei.indicator_code,
+    COALESCE(r.indicator_name, REPLACE(INITCAP(REPLACE(ei.indicator_code, '_', ' ')), ' Pct', ' (%)')) AS indicator_name,
+    ei.topic,
+    r.observation_year AS latest_observation_year,
+    'missing_published_observation' AS coverage_status
+FROM base_countries bc
+CROSS JOIN expected_indicators ei
+LEFT JOIN ranked r
+  ON r.country_key = bc.country_key
+ AND r.indicator_code = ei.indicator_code
+ AND r.recency_rank = 1
+WHERE r.country_key IS NULL;
 
 CREATE OR REPLACE VIEW mart.mart_country_phase2_latest AS
 SELECT

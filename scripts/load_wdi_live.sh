@@ -17,6 +17,10 @@ INDICATORS=(
   "NY.GDP.PCAP.CD"
   "FP.CPI.TOTL.ZG"
   "SP.POP.TOTL"
+  "SP.DYN.TFRT.IN"
+  "SP.DYN.LE00.IN"
+  "SE.PRM.ENRR"
+  "EG.ELC.ACCS.ZS"
 )
 
 if [[ ! -f "$FETCH_HELPER" ]]; then
@@ -176,9 +180,9 @@ WITH inserted_batch AS (
             'years', '$WDI_YEARS',
             'dataset_code', '$WDI_DATASET_CODE',
             'snapshot_root', '$SNAPSHOT_ROOT',
-            'indicators', jsonb_build_array('NY.GDP.MKTP.CD', 'NY.GDP.PCAP.CD', 'FP.CPI.TOTL.ZG', 'SP.POP.TOTL'),
-            'api_indicator_codes', jsonb_build_array('NY.GDP.MKTP.CD', 'NY.GDP.PCAP.CD', 'FP.CPI.TOTL.ZG', 'SP.POP.TOTL'),
-            'source_series_codes', jsonb_build_array('NY.GDP.MKTP.CD', 'NY.GDP.PCAP.CD', 'FP.CPI.TOTL.ZG', 'SP.POP.TOTL')
+            'indicators', jsonb_build_array('NY.GDP.MKTP.CD', 'NY.GDP.PCAP.CD', 'FP.CPI.TOTL.ZG', 'SP.POP.TOTL', 'SP.DYN.TFRT.IN', 'SP.DYN.LE00.IN', 'SE.PRM.ENRR', 'EG.ELC.ACCS.ZS'),
+            'api_indicator_codes', jsonb_build_array('NY.GDP.MKTP.CD', 'NY.GDP.PCAP.CD', 'FP.CPI.TOTL.ZG', 'SP.POP.TOTL', 'SP.DYN.TFRT.IN', 'SP.DYN.LE00.IN', 'SE.PRM.ENRR', 'EG.ELC.ACCS.ZS'),
+            'source_series_codes', jsonb_build_array('NY.GDP.MKTP.CD', 'NY.GDP.PCAP.CD', 'FP.CPI.TOTL.ZG', 'SP.POP.TOTL', 'SP.DYN.TFRT.IN', 'SP.DYN.LE00.IN', 'SE.PRM.ENRR', 'EG.ELC.ACCS.ZS')
         ),
         COALESCE((SELECT MAX(fetched_at) FROM tmp_wdi_snapshot_meta), CURRENT_TIMESTAMP),
         NULL,

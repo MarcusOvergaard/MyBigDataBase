@@ -10,7 +10,9 @@ INSERT INTO ref.unit (unit_code, unit_name, unit_category, decimal_precision_def
 ('CURR_USD', 'Current US Dollars', 'currency', 2),
 ('CURR_USD_PER_PERSON', 'Current US Dollars per person', 'currency_per_capita', 2),
 ('PCT', 'Percent', 'percentage', 2),
-('PERSONS', 'Persons', 'count', 0)
+('PERSONS', 'Persons', 'count', 0),
+('BIRTHS_PER_WOMAN', 'Births per woman', 'demographic_rate', 2),
+('YEARS', 'Years', 'duration', 2)
 ON CONFLICT (unit_code) DO NOTHING;
 
 INSERT INTO ref.source_system (source_code, source_name, publisher_type, base_url, access_method, license_notes) VALUES
@@ -84,6 +86,10 @@ FROM (
         ('WDI', 'NY.GDP.PCAP.CD', 'GDP per capita (current US$)', 'current US$', 'A', 'Phase 1 required macro backbone series', TRUE),
         ('WDI', 'FP.CPI.TOTL.ZG', 'Inflation, consumer prices (annual %)', 'annual %', 'A', 'Phase 1 minimal annual inflation comparison series', TRUE),
         ('WDI', 'SP.POP.TOTL', 'Population, total', 'persons', 'A', 'Phase 1 required macro backbone series', TRUE),
+        ('WDI', 'SP.DYN.TFRT.IN', 'Fertility rate, total (births per woman)', 'births per woman', 'A', 'First Phase 3 demographic continuity slice through WDI.', TRUE),
+        ('WDI', 'SP.DYN.LE00.IN', 'Life expectancy at birth, total (years)', 'years', 'A', 'First Phase 3 health continuity slice through WDI.', TRUE),
+        ('WDI', 'SE.PRM.ENRR', 'School enrollment, primary (% gross)', 'percent', 'A', 'First Phase 3 education continuity slice through WDI.', TRUE),
+        ('WDI', 'EG.ELC.ACCS.ZS', 'Access to electricity (% of population)', 'percent', 'A', 'First Phase 3 infrastructure continuity slice through WDI.', TRUE),
         ('WDI', 'SL.EMP.TOTL.SP.ZS', 'Employment to population ratio, ages 15+, total (%)', 'percent', 'A', 'Narrow real overlap slice used to prove labor source-conflict diagnostics against ILOSTAT.', TRUE),
         ('WDI', 'SL.TLF.CACT.ZS', 'Labor force participation rate, ages 15+, total (%)', 'percent', 'A', 'Narrow real overlap slice used to prove labor source-conflict diagnostics against ILOSTAT.', TRUE),
         ('WDI', 'SL.UEM.TOTL.ZS', 'Unemployment, total (% of total labor force)', 'percent', 'A', 'Narrow real overlap slice used to prove labor source-conflict diagnostics against ILOSTAT.', TRUE),
@@ -150,6 +156,10 @@ FROM (
         ('GDP_PC_CURR_USD', 'GDP per capita (current US$)', 'macro_foundation', 'CURR_USD_PER_PERSON', 'A', 'numeric', 'latest', TRUE, 'Phase 1 macro foundation GDP per capita at current US dollars.'),
         ('INFLATION_CPI_PCT', 'Inflation, consumer prices (annual %)', 'macro_prices', 'PCT', 'A', 'numeric', 'latest', TRUE, 'Minimal Phase 1 inflation slice used to prove dataset-level source-priority arbitration between WDI and IMF IFS.'),
         ('POP_TOTAL', 'Population, total', 'macro_foundation', 'PERSONS', 'A', 'numeric', 'latest', TRUE, 'Phase 1 macro foundation total population indicator.'),
+        ('FERTILITY_RATE_BIRTHS_PER_WOMAN', 'Fertility rate, total (births per woman)', 'demographics', 'BIRTHS_PER_WOMAN', 'A', 'numeric', 'latest', FALSE, 'First Phase 3 demographic slice sourced from WDI fertility continuity coverage.'),
+        ('LIFE_EXPECTANCY_YEARS', 'Life expectancy at birth, total (years)', 'health', 'YEARS', 'A', 'numeric', 'latest', FALSE, 'First Phase 3 health slice sourced from WDI life expectancy continuity coverage.'),
+        ('SCHOOL_ENROLLMENT_PRIMARY_PCT', 'School enrollment, primary (% gross)', 'education', 'PCT', 'A', 'numeric', 'latest', FALSE, 'First Phase 3 education slice sourced from WDI primary gross enrollment continuity coverage.'),
+        ('ACCESS_TO_ELECTRICITY_PCT', 'Access to electricity (% of population)', 'infrastructure', 'PCT', 'A', 'numeric', 'latest', FALSE, 'First Phase 3 infrastructure slice sourced from WDI electricity-access continuity coverage.'),
         ('EMPLOYMENT_RATE_PCT', 'Employment-to-population ratio, total ages 15+ (%)', 'labor_market', 'PCT', 'A', 'numeric', 'latest', FALSE, 'Expanded Phase 2 labor authority slice sourced from ILOSTAT annual total employment-to-population ratio ages 15+.'),
         ('LABOR_FORCE_PARTICIPATION_RATE_PCT', 'Labour force participation rate, total ages 15+ (%)', 'labor_market', 'PCT', 'A', 'numeric', 'latest', FALSE, 'Expanded Phase 2 labor authority slice sourced from ILOSTAT annual total labour force participation rate ages 15+.'),
         ('UNEMPLOYMENT_RATE_PCT', 'Unemployment rate, total ages 15+ (%)', 'labor_market', 'PCT', 'A', 'numeric', 'latest', FALSE, 'Initial Phase 2 labor authority slice sourced from ILOSTAT SDG 8.5.2 annual total unemployment rate ages 15+.'),
@@ -176,6 +186,10 @@ FROM (
         ('INFLATION_CPI_PCT', 'WDI', 'FP.CPI.TOTL.ZG', 'WDI inflation fallback mapping', TRUE),
         ('INFLATION_CPI_PCT', 'IFS', 'PCPI_PC_PP_PT', 'IFS inflation authority mapping for the live specialist-source slice', TRUE),
         ('POP_TOTAL', 'WDI', 'SP.POP.TOTL', 'WDI population backbone mapping', TRUE),
+        ('FERTILITY_RATE_BIRTHS_PER_WOMAN', 'WDI', 'SP.DYN.TFRT.IN', 'WDI fertility continuity mapping for the first Phase 3 demographic slice', TRUE),
+        ('LIFE_EXPECTANCY_YEARS', 'WDI', 'SP.DYN.LE00.IN', 'WDI life-expectancy continuity mapping for the first Phase 3 health slice', TRUE),
+        ('SCHOOL_ENROLLMENT_PRIMARY_PCT', 'WDI', 'SE.PRM.ENRR', 'WDI primary school enrollment continuity mapping for the first Phase 3 education slice', TRUE),
+        ('ACCESS_TO_ELECTRICITY_PCT', 'WDI', 'EG.ELC.ACCS.ZS', 'WDI electricity-access continuity mapping for the first Phase 3 infrastructure slice', TRUE),
         ('EMPLOYMENT_RATE_PCT', 'WDI', 'SL.EMP.TOTL.SP.ZS', 'Narrow real WDI overlap mapping for labor conflict diagnostics.', TRUE),
         ('LABOR_FORCE_PARTICIPATION_RATE_PCT', 'WDI', 'SL.TLF.CACT.ZS', 'Narrow real WDI overlap mapping for labor conflict diagnostics.', TRUE),
         ('UNEMPLOYMENT_RATE_PCT', 'WDI', 'SL.UEM.TOTL.ZS', 'Narrow real WDI overlap mapping for labor conflict diagnostics.', TRUE),
@@ -227,6 +241,10 @@ WHERE isp.indicator_key = i.indicator_key
       OR (i.indicator_code = 'GDP_PC_CURR_USD' AND d.dataset_code = 'WDI')
       OR (i.indicator_code = 'INFLATION_CPI_PCT' AND d.dataset_code IN ('WDI', 'IFS'))
       OR (i.indicator_code = 'POP_TOTAL' AND d.dataset_code = 'WDI')
+      OR (i.indicator_code = 'FERTILITY_RATE_BIRTHS_PER_WOMAN' AND d.dataset_code = 'WDI')
+      OR (i.indicator_code = 'LIFE_EXPECTANCY_YEARS' AND d.dataset_code = 'WDI')
+      OR (i.indicator_code = 'SCHOOL_ENROLLMENT_PRIMARY_PCT' AND d.dataset_code = 'WDI')
+      OR (i.indicator_code = 'ACCESS_TO_ELECTRICITY_PCT' AND d.dataset_code = 'WDI')
       OR (i.indicator_code = 'EMPLOYMENT_RATE_PCT' AND d.dataset_code IN ('ILOSTAT', 'WDI'))
       OR (i.indicator_code = 'LABOR_FORCE_PARTICIPATION_RATE_PCT' AND d.dataset_code IN ('ILOSTAT', 'WDI'))
       OR (i.indicator_code = 'UNEMPLOYMENT_RATE_PCT' AND d.dataset_code IN ('ILOSTAT', 'WDI'))
@@ -258,6 +276,10 @@ FROM (
         ('INFLATION_CPI_PCT', 'IFS', 1, 'IMF IFS is the preferred authority for the minimal inflation source-selection proof.'),
         ('INFLATION_CPI_PCT', 'WDI', 2, 'WDI remains the broad-coverage fallback inflation series when the minimal IMF IFS sample does not cover a country-year.'),
         ('POP_TOTAL', 'WDI', 1, 'Phase 1 production backbone uses WDI for broad annual country coverage.'),
+        ('FERTILITY_RATE_BIRTHS_PER_WOMAN', 'WDI', 1, 'WDI is the initial authority source for the first fertility continuity slice.'),
+        ('LIFE_EXPECTANCY_YEARS', 'WDI', 1, 'WDI is the initial authority source for the first life-expectancy continuity slice.'),
+        ('SCHOOL_ENROLLMENT_PRIMARY_PCT', 'WDI', 1, 'WDI is the initial authority source for the first education continuity slice.'),
+        ('ACCESS_TO_ELECTRICITY_PCT', 'WDI', 1, 'WDI is the initial authority source for the first infrastructure continuity slice.'),
         ('EMPLOYMENT_RATE_PCT', 'ILOSTAT', 1, 'ILOSTAT is the preferred authority for the first employment-to-population labor slice.'),
         ('EMPLOYMENT_RATE_PCT', 'WDI', 2, 'WDI is a narrow real overlap slice used to prove labor source-conflict diagnostics when ILOSTAT also covers the same country-year.'),
         ('LABOR_FORCE_PARTICIPATION_RATE_PCT', 'ILOSTAT', 1, 'ILOSTAT is the preferred authority for the first labour-force-participation labor slice.'),

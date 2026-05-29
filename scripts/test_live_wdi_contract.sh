@@ -40,8 +40,8 @@ BEGIN
         SELECT 1
         FROM raw.source_batch sb
         WHERE sb.source_batch_key = latest_batch_key
-          AND sb.request_params_json -> 'api_indicator_codes' @> '["NY.GDP.MKTP.CD","NY.GDP.PCAP.CD","FP.CPI.TOTL.ZG","SP.POP.TOTL"]'::jsonb
-          AND sb.request_params_json -> 'source_series_codes' @> '["NY.GDP.MKTP.CD","NY.GDP.PCAP.CD","FP.CPI.TOTL.ZG","SP.POP.TOTL"]'::jsonb
+          AND sb.request_params_json -> 'api_indicator_codes' @> '["NY.GDP.MKTP.CD","NY.GDP.PCAP.CD","FP.CPI.TOTL.ZG","SP.POP.TOTL","SP.DYN.TFRT.IN","SP.DYN.LE00.IN","SE.PRM.ENRR","EG.ELC.ACCS.ZS"]'::jsonb
+          AND sb.request_params_json -> 'source_series_codes' @> '["NY.GDP.MKTP.CD","NY.GDP.PCAP.CD","FP.CPI.TOTL.ZG","SP.POP.TOTL","SP.DYN.TFRT.IN","SP.DYN.LE00.IN","SE.PRM.ENRR","EG.ELC.ACCS.ZS"]'::jsonb
     ) THEN
         RAISE EXCEPTION 'Live WDI contract test failed: latest live WDI batch does not declare the expected indicator lineage';
     END IF;
@@ -53,11 +53,20 @@ BEGIN
         JOIN core.dim_dataset dd ON dd.source_dataset_key = fv.source_dataset_key
         WHERE fv.source_batch_key = latest_batch_key
           AND dd.dataset_code = 'WDI'
-          AND di.indicator_code IN ('GDP_CURR_USD', 'GDP_PC_CURR_USD', 'INFLATION_CPI_PCT', 'POP_TOTAL')
+          AND di.indicator_code IN (
+              'GDP_CURR_USD',
+              'GDP_PC_CURR_USD',
+              'INFLATION_CPI_PCT',
+              'POP_TOTAL',
+              'FERTILITY_RATE_BIRTHS_PER_WOMAN',
+              'LIFE_EXPECTANCY_YEARS',
+              'SCHOOL_ENROLLMENT_PRIMARY_PCT',
+              'ACCESS_TO_ELECTRICITY_PCT'
+          )
         GROUP BY fv.source_batch_key
-        HAVING COUNT(DISTINCT di.indicator_code) = 4
+        HAVING COUNT(DISTINCT di.indicator_code) = 8
     ) THEN
-        RAISE EXCEPTION 'Live WDI contract test failed: latest live WDI batch did not normalize all four expected WDI indicators';
+        RAISE EXCEPTION 'Live WDI contract test failed: latest live WDI batch did not normalize all eight expected WDI indicators';
     END IF;
 END;
 $$;

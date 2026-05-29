@@ -10,7 +10,7 @@ PSQL = $(PSQL_BASE) -d $(DB_NAME)
 export DB_NAME
 export PSQL_CMD = $(PSQL_BASE)
 
-.PHONY: init create-db ddl seed load-sample load-wdi-live load-wdi-labor-live load-ifs-live load-weo-live load-ilostat-live load-un-comtrade-live clean-ifs-stale-snapshots build-mart test check-alerts test-live-wdi-contract test-live-wdi-labor-contract test-live-ifs-contract test-live-weo-contract test-live-ilostat-contract test-live-un-comtrade-contract test-live-contracts test-live-contracts-offline test-phase2-starter-marts-offline test-phase2-starter-marts-debug test-phase2-monitoring-offline test-phase2-offline test-real-ingestion-offline verify-real-ingestion-live-state phase2-operator-scan phase2-operator-report phase2-operator-watchdog repeat-load-test all
+.PHONY: init create-db ddl seed load-sample load-wdi-live load-wdi-labor-live load-ifs-live load-weo-live load-ilostat-live load-un-comtrade-live clean-ifs-stale-snapshots build-mart test check-alerts test-live-wdi-contract test-live-wdi-labor-contract test-live-ifs-contract test-live-weo-contract test-live-ilostat-contract test-live-un-comtrade-contract test-live-contracts test-live-contracts-offline test-phase2-starter-marts-offline test-phase2-starter-marts-debug test-phase2-monitoring-offline test-phase2-offline test-phase3-starter-marts test-real-ingestion-offline verify-real-ingestion-live-state phase2-operator-scan phase2-operator-report phase2-operator-watchdog repeat-load-test all
 
 all: init
 
@@ -153,6 +153,11 @@ test-phase2-monitoring-offline:
 
 # Re-run the compact offline Phase 2 SQL regressions plus monitoring wrapper smoke tests
 test-phase2-offline: test-phase2-starter-marts-offline test-phase2-monitoring-offline
+
+# Assert the first Phase 3 demographics/health/education/infrastructure marts after the sample path
+test-phase3-starter-marts:
+	@echo "Running Phase 3 starter mart regression queries..."
+	@$(PSQL) -f queries/test_phase3_starter_marts.sql
 
 # Re-run the full offline real-ingestion proof: bootstrap, fixture-backed live loaders, and Phase 2 regressions
 test-real-ingestion-offline:
